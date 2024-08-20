@@ -28,7 +28,7 @@ When you have staged some changes, you can run the `turbocommit` (I recommend ma
 | Short | Long         | Description                                 |     Default      |
 | ----- | ------------ | ------------------------------------------- | :--------------: |
 | -n    |              | Number of choices to generate               |        1         |
-| -m    | --model      | Model to use                                | gpt-3.5-turbo16k |
+| -m    | --model      | Model to use                                | gpt-4o-mini      |
 | -d    | --dry-run    | Dry run. Will not ask AI for completions    |                  |
 | -p    | --print-once | Will not print tokens as they are generated |                  |
 | -t    |              | Temperature (t \|0.0 < t < 2.0\|)           |       1.0        |
@@ -37,12 +37,7 @@ When you have staged some changes, you can run the `turbocommit` (I recommend ma
 
 ### Available Models
 
-| Name                | Context Window | Cost Input | Cost Output |
-| ------------------- | -------------- | ---------- | ----------- |
-| `gpt-3.5-turbo`     | `4096`         | 0.0015     | 0.002       |
-| `gpt-3.5-turbo-16k` | `16384`        | 0.003      | 0.004       |
-| `gpt-4`             | `8192`         | 0.03       | 0.06        |
-| `gpt-4-32k`         | `32768`        | 0.06       | 0.12        |
+Please look at the help `turbocommit --help` for the most up-to-date list of models.
 
 
 ### Handling Long `git diff`

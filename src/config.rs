@@ -1,4 +1,4 @@
-use crate::{model};
+use crate::model;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::process;
@@ -22,10 +22,10 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            model: model::Model::Gpt35Turbo,
-            default_temperature: 0.8,
+            model: model::Model::Gpt4omini,
+            default_temperature: 0.5,
             default_frequency_penalty: 0.0,
-            default_number_of_choices: 2,
+            default_number_of_choices: 3,
             disable_print_as_stream: false,
             system_msg: String::from("As an AI that only returns conventional commits, you will receive input from the user in the form of a git diff of all staged files. You CANNOT generate anything that is not a conventional commit and a commit message only has 1 head line and at most 1 body.
 Make sure the body reads as a single brief message, NOT a list of bullets or multiple commits.
