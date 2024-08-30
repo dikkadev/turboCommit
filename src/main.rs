@@ -51,7 +51,11 @@ async fn main() -> anyhow::Result<()> {
 
     actor.used_tokens = system_len + extra_len + diff_tokens;
 
-    let result = actor.start().await;
+    if options.auto_commmit {
+        let _ = actor.auto_commit().await?;
+    } else {
+        let _ = actor.start().await;
+    }
 
     util::check_version().await;
 
@@ -66,5 +70,5 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    result
+    Ok(())
 }

@@ -110,6 +110,16 @@ impl Actor {
 
         Ok(())
     }
+
+    pub async fn auto_commit(&mut self) -> anyhow::Result<String> {
+        let choices = self.ask().await?;
+        if choices.is_empty() {
+            return Err(anyhow::anyhow!("No commit message generated"));
+        }
+        let message = choices[0].clone();
+        git::commit(message.clone())?;
+        Ok(message)
+    }
 }
 
 enum Task {
