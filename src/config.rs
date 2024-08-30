@@ -23,7 +23,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             model: model::Model::Gpt4omini,
-            default_temperature: 0.5,
+            default_temperature: 1.05,
             default_frequency_penalty: 0.0,
             default_number_of_choices: 3,
             disable_print_as_stream: false,

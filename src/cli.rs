@@ -1,6 +1,6 @@
 use crate::config::Config;
-use crate::openai::count_token;
 use crate::model;
+use crate::openai::count_token;
 use colored::Colorize;
 use std::str::FromStr;
 use std::{cmp, env, process};
@@ -13,6 +13,7 @@ pub struct Options {
     pub f: f64,
     pub print_once: bool,
     pub model: model::Model,
+    pub auto_commmit: bool,
 }
 
 impl From<&Config> for Options {
@@ -24,6 +25,7 @@ impl From<&Config> for Options {
             f: config.default_frequency_penalty,
             print_once: config.disable_print_as_stream,
             model: config.model,
+            auto_commmit: false,
         }
     }
 }
@@ -102,6 +104,11 @@ impl Options {
                         };
                     }
                 }
+                "--auto-commit" => {
+                    opts.auto_commmit = true;
+                    opts.n = 1;
+                    opts.print_once = true;
+                }
                 "-h" | "--help" => help(),
                 "-v" | "--version" => {
                     println!("turbocommit version {}", env!("CARGO_PKG_VERSION").purple());
@@ -164,6 +171,7 @@ fn help() {
         "(https://platform.openai.com/docs/api-reference/chat/create#chat/create-frequency-penalty)"
             .bright_black()
     );
+    println!("  --auto-commit  Automatically generate and commit a single message\n");
     println!("Anything else will be concatenated into an extra message given to the AI\n");
     println!("You can change the defaults for these options and the system message prompt in the config file, that is created the first time running the program\n{}",
         home::home_dir().unwrap_or_else(|| "".into()).join(".turbocommit.yaml").display());
