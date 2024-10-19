@@ -1,14 +1,14 @@
 [package]
 name = "turbocommit"
-version = "0.20.0"
+version = "0.20.1"
 edition = "2021"
 authors = [ "Sett",]
 description = "A CLI tool to create commit messages with OpenAI GPT models"
 readme = "README.md"
 keywords = [ "chatgpt", "commit", "commit_message", "cli", "command-line",]
-repository = "https://github.com/Sett17/turboCommit"
-homepage = "https://github.com/Sett17/turboCommit"
-documentation = "https://github.com/Sett17/turboCommit"
+repository = "https://github.com/dikkadev/turboCommit"
+homepage = "https://github.com/dikkadev/turboCommit"
+documentation = "https://github.com/dikkadev/turboCommit"
 license = "MIT"
 
 [dependencies]
