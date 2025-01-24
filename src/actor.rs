@@ -13,15 +13,17 @@ pub struct Actor {
     options: Options,
     api_key: String,
     pub used_tokens: usize,
+    api_endpoint: String,
 }
 
 impl Actor {
-    pub fn new(options: Options, api_key: String) -> Self {
+    pub fn new(options: Options, api_key: String, api_endpoint: String) -> Self {
         Self {
             messages: Vec::new(),
             options,
             api_key,
             used_tokens: 0,
+            api_endpoint,
         }
     }
 
@@ -40,8 +42,8 @@ impl Actor {
         .execute(
             self.api_key.clone(),
             self.options.print_once,
-            self.options.model.clone(),
             self.used_tokens,
+            self.api_endpoint.clone(),
         )
         .await?)
     }

@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use std::{fmt, process};
 
 use crate::animation;
-use crate::model::Model;
 use crate::util::count_lines;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -109,8 +108,8 @@ impl Request {
         &self,
         api_key: String,
         no_animations: bool,
-        model: Model,
         prompt_tokens: usize,
+        api_endpoint: String,
     ) -> anyhow::Result<Vec<String>> {
         let mut choices = vec![String::new(); self.n as usize];
 
@@ -124,7 +123,7 @@ impl Request {
         let json = serde_json::to_string(self)?;
 
         let request_builder = reqwest::Client::new()
-            .post("https://api.openai.com/v1/chat/completions")
+            .post(api_endpoint)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key)
             .body(json);
@@ -190,13 +189,9 @@ impl Request {
                                 "{}{}\n{}\n",
                                 if i == 0 {
                                     format!(
-                                        "This used {} tokens costing you about {}\n",
-                                        format!("{}", response_tokens + prompt_tokens).purple(),
-                                        format!(
-                                            "~${:0.4}",
-                                            model.cost(prompt_tokens, response_tokens)
-                                        )
-                                        .purple()
+                                        "Tokens used: {} input, {} output\n",
+                                        crate::util::format_token_count(prompt_tokens).purple(),
+                                        crate::util::format_token_count(response_tokens).purple(),
                                     )
                                     .bright_black()
                                 } else {
@@ -221,9 +216,9 @@ impl Request {
 
         if no_animations {
             println!(
-                "This used {} tokens costing you about {}\n",
-                format!("{}", response_tokens + prompt_tokens).purple(),
-                format!("~${:0.4}", model.cost(prompt_tokens, response_tokens)).purple()
+                "Tokens used: {} input, {} output\n",
+                crate::util::format_token_count(prompt_tokens).purple(),
+                crate::util::format_token_count(response_tokens).purple(),
             );
             for (i, choice) in choices.iter().enumerate() {
                 println!(
