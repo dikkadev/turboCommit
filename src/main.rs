@@ -33,26 +33,38 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let Ok(api_key) = env::var("OPENAI_API_KEY") else {
-        println!("{} {}", "OPENAI_API_KEY not set.".red(), "Refer to step 3 here: https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety".bright_black());
-        process::exit(1);
+    let api_key = match &options.api_key {
+        Some(ref key) => key.clone(),
+        None => {
+            let env_var = &config.api_key_env_var;
+            match env::var(env_var) {
+                Ok(key) => key,
+                Err(_) => {
+                    println!("{}", format!("No API key found. Either:").red());
+                    println!("  1. Set the {} environment variable", env_var.purple());
+                    println!("  2. Use the {} option", "--api-key <key>".purple());
+                    println!("\n{}", "For API key safety best practices, see: https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety".bright_black());
+                    process::exit(1);
+                }
+            }
+        }
     };
 
     let mut actor = Actor::new(
         options.clone(),
         api_key,
-        config.api_endpoint.clone(),
+        options.api_endpoint.clone(),
     );
 
     let repo = git::get_repo()?;
 
-    let system_len = openai::count_token(&config.system_msg).unwrap_or(0);
+    let system_len = openai::count_token(options.system_msg.as_ref().unwrap_or(&config.system_msg)).unwrap_or(0);
     let extra_len = openai::count_token(&options.msg).unwrap_or(0);
 
     let (diff, diff_tokens) =
         util::decide_diff(&repo, system_len + extra_len, options.model.context_size())?;
 
-    actor.add_message(Message::system(config.system_msg.clone()));
+    actor.add_message(Message::system(options.system_msg.unwrap_or(config.system_msg.clone())));
     actor.add_message(Message::user(diff));
 
     if !options.msg.is_empty() {
@@ -67,8 +79,8 @@ async fn main() -> anyhow::Result<()> {
         let _ = actor.start().await;
     }
 
-    // Only check for updates if not disabled in config
-    if !config.disable_auto_update_check {
+    // Only check for updates if not disabled in config or CLI
+    if !options.disable_auto_update_check {
         util::check_version().await;
     }
 

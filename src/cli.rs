@@ -15,6 +15,10 @@ pub struct Options {
     pub model: model::Model,
     pub auto_commmit: bool,
     pub check_version_only: bool,
+    pub api_endpoint: String,
+    pub system_msg: Option<String>,
+    pub disable_auto_update_check: bool,
+    pub api_key: Option<String>,
 }
 
 impl From<&Config> for Options {
@@ -28,6 +32,10 @@ impl From<&Config> for Options {
             model: config.model.clone(),
             auto_commmit: false,
             check_version_only: false,
+            api_endpoint: config.api_endpoint.clone(),
+            system_msg: None,
+            disable_auto_update_check: config.disable_auto_update_check,
+            api_key: None,
         }
     }
 }
@@ -114,6 +122,34 @@ impl Options {
                 "--check-version" => {
                     opts.check_version_only = true;
                 }
+                "--api-endpoint" => {
+                    if let Some(endpoint) = iter.next() {
+                        opts.api_endpoint = endpoint;
+                    }
+                }
+                "--system-msg-file" => {
+                    if let Some(path) = iter.next() {
+                        match std::fs::read_to_string(&path) {
+                            Ok(content) => opts.system_msg = Some(content),
+                            Err(err) => {
+                                println!(
+                                    "{} {}",
+                                    format!("Could not read system message file: {}", err).red(),
+                                    "Please provide a valid file path.".bright_black()
+                                );
+                                process::exit(1);
+                            }
+                        }
+                    }
+                }
+                "--disable-auto-update-check" => {
+                    opts.disable_auto_update_check = true;
+                }
+                "--api-key" => {
+                    if let Some(key) = iter.next() {
+                        opts.api_key = Some(key);
+                    }
+                }
                 "-h" | "--help" => help(),
                 "-v" | "--version" => {
                     println!("turbocommit version {}", env!("CARGO_PKG_VERSION").purple());
@@ -174,6 +210,10 @@ fn help() {
     );
     println!("  --auto-commit  Automatically generate and commit a single message\n");
     println!("  --check-version  Check for updates and exit\n");
+    println!("  --api-endpoint <url>  Set the API endpoint URL\n");
+    println!("  --system-msg-file <path>  Load system message from a file\n");
+    println!("  --disable-auto-update-check  Disable automatic update checks\n");
+    println!("  --api-key <key>  Set the API key\n");
     println!("Anything else will be concatenated into an extra message given to the AI\n");
     println!("You can change the defaults for these options and the system message prompt in the config file, that is created the first time running the program\n{}",
         home::home_dir().unwrap_or_else(|| "".into()).join(".turbocommit.yaml").display());

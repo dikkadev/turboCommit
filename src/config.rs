@@ -23,6 +23,8 @@ pub struct Config {
     #[serde(default)]
     pub api_endpoint: String,
     #[serde(default)]
+    pub api_key_env_var: String,
+    #[serde(default)]
     pub default_temperature: f64,
     #[serde(default)]
     pub default_frequency_penalty: f64,
@@ -41,6 +43,7 @@ impl Default for Config {
         Self {
             model: model::Model("gpt-4o-mini".to_string()),
             api_endpoint: String::from("https://api.openai.com/v1/chat/completions"),
+            api_key_env_var: String::from("OPENAI_API_KEY"),
             default_temperature: 1.05,
             default_frequency_penalty: 0.0,
             default_number_of_choices: 3,
