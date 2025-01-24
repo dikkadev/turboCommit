@@ -31,6 +31,8 @@ pub struct Config {
     #[serde(default)]
     pub disable_print_as_stream: bool,
     #[serde(default)]
+    pub disable_auto_update_check: bool,
+    #[serde(default)]
     pub system_msg: String,
 }
 
@@ -43,6 +45,7 @@ impl Default for Config {
             default_frequency_penalty: 0.0,
             default_number_of_choices: 3,
             disable_print_as_stream: false,
+            disable_auto_update_check: false,
             system_msg: String::from("As an AI that only returns conventional commits, you will receive input from the user in the form of a git diff of all staged files. You CANNOT generate anything that is not a conventional commit and a commit message only has 1 head line and at most 1 body.
 Make sure the body reads as a single brief message, NOT a list of bullets or multiple commits.
 Do not format your response as markdown or similiar! You are simple and exclusively respond with a single commit message.
@@ -312,6 +315,7 @@ default_temperature: 1.0
 default_frequency_penalty: 0.0
 default_number_of_choices: 3
 disable_print_as_stream: false
+disable_auto_update_check: true
 system_msg: "Test message"
 "#;
         let (_file_path, _dir) = create_test_config(config_content);
@@ -321,6 +325,8 @@ system_msg: "Test message"
         
         let config = Config::load();
         assert!(config.is_ok());
+        let config = config.unwrap();
+        assert!(config.disable_auto_update_check);
     }
 
     #[test]
@@ -382,6 +388,7 @@ default_temperature: 1.0
 default_frequency_penalty: 0.0
 default_number_of_choices: 3
 disable_print_as_stream: false
+disable_auto_update_check: false
 system_msg: ""
 "#;
         let (_file_path, _dir) = create_test_config(config_content);
@@ -417,5 +424,11 @@ system_msg: ""
         let content = std::fs::read_to_string(config_path).unwrap();
         let loaded_config: Config = serde_yaml::from_str(&content).unwrap();
         assert_eq!(loaded_config.model.0, "gpt-4");
+    }
+
+    #[test]
+    fn test_default_auto_update_check() {
+        let config = Config::default();
+        assert!(!config.disable_auto_update_check, "Auto update check should be enabled by default");
     }
 }

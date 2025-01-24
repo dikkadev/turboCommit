@@ -27,6 +27,12 @@ async fn main() -> anyhow::Result<()> {
     }
     let options = cli::Options::new(env::args(), &config);
 
+    // If check_version_only is set, just check version and exit
+    if options.check_version_only {
+        util::check_version().await;
+        return Ok(());
+    }
+
     let Ok(api_key) = env::var("OPENAI_API_KEY") else {
         println!("{} {}", "OPENAI_API_KEY not set.".red(), "Refer to step 3 here: https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety".bright_black());
         process::exit(1);
@@ -61,7 +67,10 @@ async fn main() -> anyhow::Result<()> {
         let _ = actor.start().await;
     }
 
-    util::check_version().await;
+    // Only check for updates if not disabled in config
+    if !config.disable_auto_update_check {
+        util::check_version().await;
+    }
 
     if util::check_config_age(Duration::from_secs(60 * 60 * 24 * 30 * 6)) {
         if !util::is_system_prompt_same_as_default(&config.system_msg) {
