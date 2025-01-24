@@ -176,7 +176,10 @@ fn help() {
         "\nThe system message is about ~{} tokens long",
         format!(
             "{}",
-            count_token(&crate::config::Config::load().system_msg).unwrap_or(0)
+            count_token(&crate::config::Config::load().unwrap_or_else(|e| {
+                println!("{}", format!("Error loading config: {}", e).red());
+                process::exit(1);
+            }).system_msg).unwrap_or(0)
         )
         .green()
     );
@@ -225,7 +228,7 @@ mod tests {
         assert_eq!(options.t, 1.0);
         assert_eq!(options.f, 0.5);
         assert_eq!(options.print_once, true);
-        assert_eq!(options.model, model::Model::Gpt4);
+        assert_eq!(options.model.0, "gpt-4");
         assert_eq!(options.msg, "User Explanation/Instruction: 'test commit'");
     }
 }

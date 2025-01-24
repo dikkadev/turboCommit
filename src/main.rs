@@ -17,7 +17,7 @@ mod util;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let config = Config::load();
+    let config = Config::load()?;
     match config.save_if_changed() {
         Ok(_) => (),
         Err(err) => {
