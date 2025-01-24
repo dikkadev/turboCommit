@@ -24,7 +24,7 @@ impl From<&Config> for Options {
             t: config.default_temperature,
             f: config.default_frequency_penalty,
             print_once: config.disable_print_as_stream,
-            model: config.model,
+            model: config.model.clone(),
             auto_commmit: false,
         }
     }
@@ -155,11 +155,7 @@ fn help() {
     println!("Options:");
     println!("  -n <n>   Number of choices to generate\n",);
     println!("  -m <m>   Model to use\n  --model <m>",);
-    println!("    Available models:");
-    model::Model::all().iter().for_each(|model| {
-        println!("     {}", model.to_string().bright_black());
-    });
-    println!();
+    println!("    Model can be any OpenAI compatible model name\n");
     println!("  -p       Will not print tokens as they are generated.\n  --print-once \n",);
     println!(
         "  -t <t>   Temperature (|t| 0.0 < t < 2.0)\n{}\n",

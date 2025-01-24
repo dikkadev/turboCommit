@@ -32,7 +32,11 @@ async fn main() -> anyhow::Result<()> {
         process::exit(1);
     };
 
-    let mut actor = Actor::new(options.clone(), api_key);
+    let mut actor = Actor::new(
+        options.clone(),
+        api_key,
+        config.api_endpoint.clone(),
+    );
 
     let repo = git::get_repo()?;
 

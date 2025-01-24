@@ -151,3 +151,7 @@ pub fn choose_message(choices: Vec<String>) -> Option<String> {
     };
     Some(choices[commit_index].clone())
 }
+
+pub fn format_token_count(tokens: usize) -> String {
+    format!("{:.2}k", tokens as f64 / 1000.0)
+}
