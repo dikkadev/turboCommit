@@ -237,7 +237,7 @@ fn help() {
     println!("    Model can be any OpenAI compatible model name\n");
     println!("  -p       Will not print tokens as they are generated.\n  --print-once \n",);
     println!(
-        "  -t <t>   Temperature (|t| 0.0 < t < 2.0)\n{}\n",
+        "  -t <t>   Temperature (|t| 0.0 < t < 2.0)\n{}\n           Note: Has no effect when using reasoning mode\n",
         "(https://platform.openai.com/docs/api-reference/chat/create#chat/create-temperature)"
             .bright_black()
     );
@@ -252,7 +252,7 @@ fn help() {
     println!("  --system-msg-file <path>  Load system message from a file\n");
     println!("  --disable-auto-update-check  Disable automatic update checks\n");
     println!("  --api-key <key>  Set the API key\n");
-    println!("  -r, --enable-reasoning  Enable reasoning mode for models that support it\n");
+    println!("  -r, --enable-reasoning  Enable support for models with reasoning capabilities (like o-series)\n");
     println!("  --reasoning-effort <effort>  Set the reasoning effort (defaults to 'medium', common values: low, medium, high)\n");
     println!("                              Note: Valid values depend on the model and service being used\n");
     println!("  -d, --debug  Enable debug mode (prints basic request/response info)\n");
