@@ -19,6 +19,10 @@ pub struct Options {
     pub system_msg: Option<String>,
     pub disable_auto_update_check: bool,
     pub api_key: Option<String>,
+    pub reasoning_effort: Option<String>,
+    pub enable_reasoning: bool,
+    pub debug: bool,
+    pub debug_file: Option<String>,
 }
 
 impl From<&Config> for Options {
@@ -36,6 +40,10 @@ impl From<&Config> for Options {
             system_msg: None,
             disable_auto_update_check: config.disable_auto_update_check,
             api_key: None,
+            reasoning_effort: None,
+            enable_reasoning: config.enable_reasoning,
+            debug: false,
+            debug_file: None,
         }
     }
 }
@@ -150,6 +158,35 @@ impl Options {
                         opts.api_key = Some(key);
                     }
                 }
+                "--reasoning-effort" => {
+                    if let Some(effort) = iter.next() {
+                        if !["low", "medium", "high"].contains(&effort.as_str()) {
+                            println!(
+                                "{} {}",
+                                "Warning: Uncommon reasoning effort value.".yellow(),
+                                "Common values are: low, medium, high (depends on model/service)".bright_black()
+                            );
+                        }
+                        opts.reasoning_effort = Some(effort);
+                    }
+                }
+                "-r" | "--enable-reasoning" => {
+                    opts.enable_reasoning = true;
+                    if opts.reasoning_effort.is_none() {
+                        opts.reasoning_effort = Some("medium".to_string());
+                    }
+                }
+                "-d" | "--debug" => {
+                    opts.debug = true;
+                    opts.print_once = true;
+                }
+                "--debug-file" => {
+                    if let Some(path) = iter.next() {
+                        opts.debug_file = Some(path);
+                        opts.debug = true;
+                        opts.print_once = true;
+                    }
+                }
                 "-h" | "--help" => help(),
                 "-v" | "--version" => {
                     println!("turbocommit version {}", env!("CARGO_PKG_VERSION").purple());
@@ -194,7 +231,8 @@ fn help() {
 
     println!("\nUsage: turbocommit [options] [message]\n");
     println!("Options:");
-    println!("  -n <n>   Number of choices to generate\n",);
+    println!("  -n <n>   Number of choices to generate");
+    println!("           Note: Some models (e.g., o-series) may not support multiple choices\n");
     println!("  -m <m>   Model to use\n  --model <m>",);
     println!("    Model can be any OpenAI compatible model name\n");
     println!("  -p       Will not print tokens as they are generated.\n  --print-once \n",);
@@ -214,6 +252,12 @@ fn help() {
     println!("  --system-msg-file <path>  Load system message from a file\n");
     println!("  --disable-auto-update-check  Disable automatic update checks\n");
     println!("  --api-key <key>  Set the API key\n");
+    println!("  -r, --enable-reasoning  Enable reasoning mode for models that support it\n");
+    println!("  --reasoning-effort <effort>  Set the reasoning effort (defaults to 'medium', common values: low, medium, high)\n");
+    println!("                              Note: Valid values depend on the model and service being used\n");
+    println!("  -d, --debug  Enable debug mode (prints basic request/response info)\n");
+    println!("  --debug-file <path>  Write detailed debug logs to specified file (overwrites existing file)\n");
+    println!("                       Use '-' to write to stdout instead of a file\n");
     println!("Anything else will be concatenated into an extra message given to the AI\n");
     println!("You can change the defaults for these options and the system message prompt in the config file, that is created the first time running the program\n{}",
         home::home_dir().unwrap_or_else(|| "".into()).join(".turbocommit.yaml").display());
@@ -247,6 +291,8 @@ mod tests {
         assert_eq!(options.f, config.default_frequency_penalty);
         assert_eq!(options.print_once, config.disable_print_as_stream);
         assert_eq!(options.model, config.model);
+        assert_eq!(options.enable_reasoning, config.enable_reasoning);
+        assert_eq!(options.reasoning_effort, None);
     }
 
     #[test]
@@ -263,18 +309,101 @@ mod tests {
             "--print-once",
             "--model",
             "gpt-4",
+            "--enable-reasoning",
+            "--reasoning-effort",
+            "medium",
             "test",
             "commit",
         ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
-        println!("{:#?}", options);
 
         assert_eq!(options.n, 3);
         assert_eq!(options.t, 1.0);
         assert_eq!(options.f, 0.5);
         assert_eq!(options.print_once, true);
         assert_eq!(options.model.0, "gpt-4");
+        assert_eq!(options.enable_reasoning, true);
+        assert_eq!(options.reasoning_effort, Some("medium".to_string()));
         assert_eq!(options.msg, "User Explanation/Instruction: 'test commit'");
+    }
+
+    #[test]
+    fn test_uncommon_reasoning_effort() {
+        let config = Config::default();
+        let args = vec![
+            "turbocommit",
+            "--enable-reasoning",
+            "--reasoning-effort",
+            "very-high",
+        ];
+        let args = args.into_iter().map(String::from).collect::<Vec<String>>();
+        let options = Options::new(args.into_iter(), &config);
+
+        assert_eq!(options.enable_reasoning, true);
+        assert_eq!(options.reasoning_effort, Some("very-high".to_string()));
+    }
+
+    #[test]
+    fn test_debug_mode() {
+        let config = Config::default();
+        let args = vec![
+            "turbocommit",
+            "-d",
+            "-r",
+            "--model",
+            "o3-mini",
+        ];
+        let args = args.into_iter().map(String::from).collect::<Vec<String>>();
+        let options = Options::new(args.into_iter(), &config);
+
+        assert!(options.debug);
+        assert!(options.print_once); // Debug mode forces print_once
+        assert!(options.enable_reasoning);
+        assert_eq!(options.reasoning_effort, Some("medium".to_string())); // Default effort
+        assert_eq!(options.model.0, "o3-mini");
+    }
+
+    #[test]
+    fn test_debug_file_options() {
+        let config = Config::default();
+        
+        // Test debug file to a path
+        let args = vec![
+            "turbocommit",
+            "--debug-file",
+            "debug.log",
+        ];
+        let args = args.into_iter().map(String::from).collect::<Vec<String>>();
+        let options = Options::new(args.into_iter(), &config);
+
+        assert!(options.debug);  // Debug mode should be enabled
+        assert!(options.print_once);  // Should force print_once
+        assert_eq!(options.debug_file, Some("debug.log".to_string()));
+
+        // Test debug file to stdout with "-"
+        let args = vec![
+            "turbocommit",
+            "--debug-file",
+            "-",
+        ];
+        let args = args.into_iter().map(String::from).collect::<Vec<String>>();
+        let options = Options::new(args.into_iter(), &config);
+
+        assert!(options.debug);
+        assert!(options.print_once);
+        assert_eq!(options.debug_file, Some("-".to_string()));
+
+        // Test debug mode without file
+        let args = vec![
+            "turbocommit",
+            "-d",
+        ];
+        let args = args.into_iter().map(String::from).collect::<Vec<String>>();
+        let options = Options::new(args.into_iter(), &config);
+
+        assert!(options.debug);
+        assert!(options.print_once);
+        assert_eq!(options.debug_file, None);
     }
 }

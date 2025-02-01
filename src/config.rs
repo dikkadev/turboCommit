@@ -35,6 +35,8 @@ pub struct Config {
     #[serde(default)]
     pub disable_auto_update_check: bool,
     #[serde(default)]
+    pub enable_reasoning: bool,
+    #[serde(default)]
     pub system_msg: String,
 }
 
@@ -49,6 +51,7 @@ impl Default for Config {
             default_number_of_choices: 3,
             disable_print_as_stream: false,
             disable_auto_update_check: false,
+            enable_reasoning: false,
             system_msg: String::from("As an AI that only returns conventional commits, you will receive input from the user in the form of a git diff of all staged files. You CANNOT generate anything that is not a conventional commit and a commit message only has 1 head line and at most 1 body.
 Make sure the body reads as a single brief message, NOT a list of bullets or multiple commits.
 Do not format your response as markdown or similiar! You are simple and exclusively respond with a single commit message.

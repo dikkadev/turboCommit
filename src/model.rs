@@ -45,8 +45,10 @@ impl Model {
             "gpt-4-turbo" => 128000,
             "gpt-4o" => 128000,
             "gpt-4o-mini" => 128000,
-            "o1-preview" => 128000,
+            "o1" => 200000,
             "o1-mini" => 128000,
+            "o1-preview" => 128000,
+            "o3-mini" => 200000,
             _ => 4096, // Conservative default
         }
     }
