@@ -6,7 +6,7 @@ use crossterm::style::Print;
 use inquire::Select;
 
 use crate::cli::Options;
-use crate::{git, openai, util};
+use crate::{git, openai, util, debug_log::DebugLogger};
 
 pub struct Actor {
     messages: Vec<openai::Message>,
@@ -14,16 +14,20 @@ pub struct Actor {
     api_key: String,
     pub used_tokens: usize,
     api_endpoint: String,
+    debug_logger: DebugLogger,
 }
 
 impl Actor {
     pub fn new(options: Options, api_key: String, api_endpoint: String) -> Self {
+        // Get debug_file before moving options
+        let debug_file = options.debug_file.clone();
         Self {
             messages: Vec::new(),
             options,
             api_key,
             used_tokens: 0,
             api_endpoint,
+            debug_logger: DebugLogger::new(debug_file),
         }
     }
 
@@ -31,21 +35,74 @@ impl Actor {
         self.messages.push(message);
     }
 
-    async fn ask(&self) -> anyhow::Result<Vec<String>> {
-        Ok(openai::Request::new(
+    async fn ask(&mut self) -> anyhow::Result<Vec<String>> {
+        let mut request = openai::Request::new(
             self.options.model.clone().to_string(),
             self.messages.clone(),
             self.options.n,
             self.options.t,
             self.options.f,
-        )
-        .execute(
-            self.api_key.clone(),
-            self.options.print_once,
-            self.used_tokens,
-            self.api_endpoint.clone(),
-        )
-        .await?)
+        );
+
+        // Add reasoning effort if reasoning mode is enabled
+        if self.options.enable_reasoning {
+            request = request.with_reasoning_effort(self.options.reasoning_effort.clone());
+        }
+
+        // Log request details
+        let json = serde_json::to_string(&request)?;
+        self.debug_logger.log_request(&json);
+
+        // Log basic info about the request
+        let info = format!(
+            "model={}, reasoning={}, effort={}, messages={}, tokens={}",
+            self.options.model.0,
+            self.options.enable_reasoning,
+            self.options.reasoning_effort.as_deref().unwrap_or("none"),
+            self.messages.len(),
+            self.used_tokens
+        );
+        self.debug_logger.log_info(&info);
+
+        // Only show minimal info in regular debug mode
+        if self.options.debug && self.options.debug_file.is_none() {
+            println!("\n{}", "Request Info:".blue().bold());
+            println!("  Model: {}", self.options.model.0.purple());
+            if self.options.enable_reasoning {
+                println!("  Reasoning: {} ({})", 
+                    "enabled".purple(),
+                    self.options.reasoning_effort.as_deref().unwrap_or("medium").purple()
+                );
+            }
+            println!("  Messages: {}", self.messages.len().to_string().purple());
+            println!("  Tokens (input): {}", self.used_tokens.to_string().purple());
+        }
+
+        match request
+            .execute(
+                self.api_key.clone(),
+                self.options.print_once,
+                self.used_tokens,
+                self.api_endpoint.clone(),
+                self.options.debug,
+                &mut self.debug_logger,
+            )
+            .await
+        {
+            Ok(choices) => {
+                // Log successful response
+                self.debug_logger.log_response(&format!(
+                    "success: generated {} choices",
+                    choices.len()
+                ));
+                Ok(choices)
+            }
+            Err(e) => {
+                // Log error details
+                self.debug_logger.log_error(&format!("API error: {:#?}", e));
+                Err(e)
+            }
+        }
     }
 
     pub async fn start(&mut self) -> anyhow::Result<()> {

@@ -14,6 +14,7 @@ mod git;
 mod model;
 mod openai;
 mod util;
+mod debug_log;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -64,7 +65,12 @@ async fn main() -> anyhow::Result<()> {
     let (diff, diff_tokens) =
         util::decide_diff(&repo, system_len + extra_len, options.model.context_size())?;
 
-    actor.add_message(Message::system(options.system_msg.unwrap_or(config.system_msg.clone())));
+    // Use developer role if reasoning mode is enabled, system role otherwise
+    if options.enable_reasoning {
+        actor.add_message(Message::developer(options.system_msg.unwrap_or(config.system_msg.clone())));
+    } else {
+        actor.add_message(Message::system(options.system_msg.unwrap_or(config.system_msg.clone())));
+    }
     actor.add_message(Message::user(diff));
 
     if !options.msg.is_empty() {
