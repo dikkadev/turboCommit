@@ -137,7 +137,7 @@ pub async fn check_version() {
 
 pub fn choose_message(choices: Vec<String>) -> Option<String> {
     if choices.len() == 1 {
-        return Some(choices[0].clone());
+        return Some(process_response(&choices[0]));
     }
     let max_index = choices.len();
     let commit_index = match inquire::CustomType::<usize>::new(&format!(
@@ -158,9 +158,31 @@ pub fn choose_message(choices: Vec<String>) -> Option<String> {
             return None;
         }
     };
-    Some(choices[commit_index].clone())
+    Some(process_response(&choices[commit_index]))
 }
 
 pub fn format_token_count(tokens: usize) -> String {
     format!("{:.2}k", tokens as f64 / 1000.0)
+}
+
+fn process_response(response: &str) -> String {
+    // If response contains <think> tag, extract and process it
+    if let Some(think_start) = response.find("<think>") {
+        if let Some(think_end) = response.find("</think>") {
+            let thinking = &response[think_start + 7..think_end];
+            // Get message part and trim any whitespace including newlines at start/end
+            let message_part = response[think_end + 8..].trim_matches(|c: char| c.is_whitespace());
+            
+            // Print the thinking section nicely
+            println!("\n{}", "AI's Thought Process:".blue().bold());
+            println!("{}", thinking.bright_black());
+            println!("\n{}", "Generated Commit Message:".blue().bold());
+            println!("[0] {}", "=".repeat(76));
+            println!("{}", message_part);
+            
+            return message_part.to_string();
+        }
+    }
+    // If no think tags found, return the original response trimmed of all whitespace including newlines
+    response.trim_matches(|c: char| c.is_whitespace()).to_string()
 }

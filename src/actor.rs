@@ -36,10 +36,11 @@ impl Actor {
     }
 
     async fn ask(&mut self) -> anyhow::Result<Vec<String>> {
+        let n = if self.options.enable_reasoning { 1 } else { self.options.n };
         let mut request = openai::Request::new(
             self.options.model.clone().to_string(),
             self.messages.clone(),
-            self.options.n,
+            n,
             self.options.t,
             self.options.f,
         );

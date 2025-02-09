@@ -366,16 +366,41 @@ impl Request {
             );
             for (i, choice) in choices.iter().enumerate() {
                 println!(
-                    "[{}]====================\n{}\n",
+                    "[{}] {}\n{}\n",
                     format!("{i}").purple(),
+                    "=".repeat(77 - i.to_string().len()),
                     choice
                 );
+            }
+        } else {
+            // For regular mode (non-debug), show the final messages nicely formatted
+            // Only show the messages header if we have multiple choices
+            if choices.len() > 1 {
+                println!("\n{}", "Generated Commit Messages:".blue().bold());
+            }
+            // Don't show the messages here if it's a reasoning response (has <think> tag)
+            // as it will be handled by process_response
+            if !choices[0].contains("<think>") {
+                for (i, choice) in choices.iter().enumerate() {
+                    println!(
+                        "[{}] {}\n{}",
+                        format!("{i}").purple(),
+                        "=".repeat(77 - i.to_string().len()),
+                        choice
+                    );
+                }
             }
         }
 
         execute!(
             stdout,
             Print(format!("{}\n", "=======================".bright_black())),
+        )?;
+
+        execute!(
+            stdout,
+            MoveToPreviousLine(lines_to_move_up),
+            Clear(ClearType::FromCursorDown),
         )?;
 
         Ok(choices)
