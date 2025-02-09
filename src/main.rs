@@ -19,13 +19,6 @@ mod debug_log;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let config = Config::load()?;
-    match config.save_if_changed() {
-        Ok(_) => (),
-        Err(err) => {
-            println!("{}", format!("Unable to write to config: {err}").red());
-            process::exit(1);
-        }
-    }
     let options = cli::Options::new(env::args(), &config);
 
     // If check_version_only is set, just check version and exit
