@@ -39,7 +39,6 @@ impl<'de> Deserialize<'de> for Model {
 
 impl Model {
     pub fn context_size(&self) -> usize {
-        // Default to a conservative context size if unknown
         match self.0.as_str() {
             "gpt-4" => 8192,
             "gpt-4-turbo" => 128000,
@@ -49,7 +48,7 @@ impl Model {
             "o1-mini" => 128000,
             "o1-preview" => 128000,
             "o3-mini" => 200000,
-            _ => 4096, // Conservative default
+            _ => usize::MAX,
         }
     }
 }

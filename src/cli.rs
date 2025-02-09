@@ -23,6 +23,7 @@ pub struct Options {
     pub enable_reasoning: bool,
     pub debug: bool,
     pub debug_file: Option<String>,
+    pub always_select_files: bool,
 }
 
 impl From<&Config> for Options {
@@ -44,6 +45,7 @@ impl From<&Config> for Options {
             enable_reasoning: config.enable_reasoning,
             debug: false,
             debug_file: None,
+            always_select_files: false,
         }
     }
 }
@@ -187,6 +189,9 @@ impl Options {
                         opts.print_once = true;
                     }
                 }
+                "--select-files" => {
+                    opts.always_select_files = true;
+                }
                 "-h" | "--help" => help(),
                 "-v" | "--version" => {
                     println!("turbocommit version {}", env!("CARGO_PKG_VERSION").purple());
@@ -258,6 +263,7 @@ fn help() {
     println!("  -d, --debug  Enable debug mode (prints basic request/response info)\n");
     println!("  --debug-file <path>  Write detailed debug logs to specified file (overwrites existing file)\n");
     println!("                       Use '-' to write to stdout instead of a file\n");
+    println!("  --select-files  Always prompt for file selection, regardless of token count\n");
     println!("Anything else will be concatenated into an extra message given to the AI\n");
     println!("You can change the defaults for these options and the system message prompt in the config file, that is created the first time running the program\n{}",
         home::home_dir().unwrap_or_else(|| "".into()).join(".turbocommit.yaml").display());

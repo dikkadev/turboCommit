@@ -56,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
     let extra_len = openai::count_token(&options.msg).unwrap_or(0);
 
     let (diff, diff_tokens) =
-        util::decide_diff(&repo, system_len + extra_len, options.model.context_size())?;
+        util::decide_diff(&repo, system_len + extra_len, options.model.context_size(), options.always_select_files)?;
 
     // Use developer role if reasoning mode is enabled, system role otherwise
     if options.enable_reasoning {

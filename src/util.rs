@@ -10,6 +10,7 @@ pub fn decide_diff(
     repo: &git2::Repository,
     used_tokens: usize,
     context: usize,
+    always_select_files: bool,
 ) -> anyhow::Result<(String, usize)> {
     let staged_files = git::staged_files(&repo)?;
     let mut diff = git::diff(&repo, &staged_files)?;
@@ -24,17 +25,25 @@ pub fn decide_diff(
         std::process::exit(1);
     }
 
-    while used_tokens + diff_tokens > context {
-        println!(
-            "{} {}",
-            "The request is too long!".red(),
-            format!(
-                "The request is ~{} tokens long, while the maximum is {}.",
-                used_tokens + diff_tokens,
-                context
-            )
-            .bright_black()
-        );
+    if always_select_files || used_tokens + diff_tokens > context {
+        if always_select_files {
+            println!(
+                "{} {}",
+                "File selection mode:".blue(),
+                "Select the files you want to include in the commit.".bright_black()
+            );
+        } else {
+            println!(
+                "{} {}",
+                "The request is too long!".red(),
+                format!(
+                    "The request is ~{} tokens long, while the maximum is {}.",
+                    used_tokens + diff_tokens,
+                    context
+                )
+                .bright_black()
+            );
+        }
         let selected_files = MultiSelect::new(
             "Select the files you want to include in the diff:",
             staged_files.clone(),
