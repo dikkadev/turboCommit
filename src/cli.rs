@@ -24,6 +24,7 @@ pub struct Options {
     pub debug: bool,
     pub debug_file: Option<String>,
     pub always_select_files: bool,
+    pub config_file: Option<String>,
 }
 
 impl From<&Config> for Options {
@@ -46,6 +47,7 @@ impl From<&Config> for Options {
             debug: false,
             debug_file: None,
             always_select_files: false,
+            config_file: None,
         }
     }
 }
@@ -192,6 +194,11 @@ impl Options {
                 "--select-files" => {
                     opts.always_select_files = true;
                 }
+                "-c" | "--config" => {
+                    if let Some(path) = iter.next() {
+                        opts.config_file = Some(path);
+                    }
+                }
                 "-h" | "--help" => help(),
                 "-v" | "--version" => {
                     println!("turbocommit version {}", env!("CARGO_PKG_VERSION").purple());
@@ -264,6 +271,7 @@ fn help() {
     println!("  --debug-file <path>  Write detailed debug logs to specified file (overwrites existing file)\n");
     println!("                       Use '-' to write to stdout instead of a file\n");
     println!("  --select-files  Always prompt for file selection, regardless of token count\n");
+    println!("  -c, --config <path>  Set the config file path\n");
     println!("Anything else will be concatenated into an extra message given to the AI\n");
     println!("You can change the defaults for these options and the system message prompt in the config file, that is created the first time running the program\n{}",
         home::home_dir().unwrap_or_else(|| "".into()).join(".turbocommit.yaml").display());

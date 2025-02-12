@@ -133,6 +133,23 @@ disable_print_as_stream: false
 disable_auto_update_check: false
 ```
 
+### Multiple Config Files
+
+You can maintain multiple configuration files for different use cases (e.g., different providers or environments) and specify which one to use with the `-c` or `--config` option:
+
+```bash
+# Use a local config file
+turbocommit -c ./local-config.yaml
+
+# Use a different provider's config
+turbocommit -c ~/.turbocommit-azure.yaml
+
+# Use the default config
+turbocommit  # uses ~/.turbocommit.yaml
+```
+
+Each config file follows the same format as shown above. This allows you to easily switch between different configurations without modifying the default config file.
+
 ## Contributing
 
 Contributions are welcome! Feel free to open issues and pull requests.

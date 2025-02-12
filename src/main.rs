@@ -18,8 +18,9 @@ mod debug_log;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let config = Config::load()?;
-    let options = cli::Options::new(env::args(), &config);
+    // First get the default config just to parse CLI options
+    let default_config = Config::load()?;
+    let mut options = cli::Options::new(env::args(), &default_config);
 
     // If check_version_only is set, just check version and exit
     if options.check_version_only {
@@ -27,18 +28,34 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // Load the actual config we'll use (either custom or default)
+    let config = if let Some(config_path) = options.config_file.as_ref() {
+        Config::load_from_path(std::path::Path::new(config_path))?
+    } else {
+        default_config
+    };
+
+    // Update options with the final config values
+    options = cli::Options::new(env::args(), &config);
+
     let api_key = match &options.api_key {
         Some(ref key) => key.clone(),
         None => {
             let env_var = &config.api_key_env_var;
-            match env::var(env_var) {
-                Ok(key) => key,
-                Err(_) => {
-                    println!("{}", format!("No API key found. Either:").red());
-                    println!("  1. Set the {} environment variable", env_var.purple());
-                    println!("  2. Use the {} option", "--api-key <key>".purple());
-                    println!("\n{}", "For API key safety best practices, see: https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety".bright_black());
-                    process::exit(1);
+            if env_var.trim().is_empty() {
+                // If env_var is empty, no API key is needed
+                String::new()
+            } else {
+                // Only check environment variable if env_var is not empty
+                match env::var(env_var) {
+                    Ok(key) => key,
+                    Err(_) => {
+                        println!("{}", format!("No API key found. Either:").red());
+                        println!("  1. Set the {} environment variable", env_var.purple());
+                        println!("  2. Use the {} option", "--api-key <key>".purple());
+                        println!("\n{}", "For API key safety best practices, see: https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety".bright_black());
+                        process::exit(1);
+                    }
                 }
             }
         }

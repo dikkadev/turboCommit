@@ -72,6 +72,57 @@ No yapping!"),
 }
 
 impl Config {
+    pub fn load_from_path(path: &std::path::Path) -> anyhow::Result<Self> {
+        //debug log the path we load from
+        println!("Loading config from path: {}", path.display());
+        let config = match std::fs::read_to_string(path) {
+            Ok(config_str) => {
+                match serde_yaml::from_str::<Self>(&config_str) {
+                    Ok(config) => config,
+                    Err(err) => {
+                        return Err(anyhow::anyhow!("Configuration file parsing error: {}", err));
+                    }
+                }
+            },
+            Err(err) => {
+                match err.kind() {
+                    std::io::ErrorKind::NotFound => {
+                        println!("{}", format!("Config file not found at: {}", path.display()).red());
+                        process::exit(1);
+                    }
+                    _ => {
+                        return Err(anyhow::anyhow!("Error reading configuration file: {}", err));
+                    }
+                }
+            }
+        };
+
+        // Validate the configuration
+        if let Err(validation_errors) = config.validate() {
+            let mut error_msg = String::from("Configuration validation errors:\n");
+            for error in validation_errors {
+                error_msg.push_str(&format!("  {}\n", error));
+            }
+            error_msg.push_str(&format!("\nConfiguration file location: {}", path.display()));
+            
+            // If system message is empty, show the default
+            if config.system_msg.trim().is_empty() {
+                error_msg.push_str("\n\nDefault system message:\n");
+                error_msg.push_str(&Self::default().system_msg);
+            }
+            
+            return Err(anyhow::anyhow!(error_msg));
+        }
+
+        // After validation passes, fill in empty system message with default
+        let mut config = config;
+        if config.system_msg.trim().is_empty() {
+            config.system_msg = Self::default().system_msg;
+        }
+
+        Ok(config)
+    }
+
     pub fn load() -> anyhow::Result<Self> {
         let path = home::home_dir().map_or_else(
             || {
@@ -436,5 +487,90 @@ system_msg: ""
     fn test_default_auto_update_check() {
         let config = Config::default();
         assert!(!config.disable_auto_update_check, "Auto update check should be enabled by default");
+    }
+
+    #[test]
+    fn test_load_from_path_valid_config() {
+        let config_content = r#"
+model: gpt-4
+api_endpoint: https://api.openai.com/v1/chat/completions
+default_temperature: 1.0
+default_frequency_penalty: 0.0
+default_number_of_choices: 3
+disable_print_as_stream: false
+disable_auto_update_check: true
+system_msg: "Test message"
+"#;
+        let (file_path, _dir) = create_test_config(config_content);
+        
+        let config = Config::load_from_path(&file_path);
+        assert!(config.is_ok());
+        let config = config.unwrap();
+        assert_eq!(config.model.0, "gpt-4");
+        assert_eq!(config.default_temperature, 1.0);
+        assert!(config.disable_auto_update_check);
+        assert_eq!(config.system_msg, "Test message");
+    }
+
+    #[test]
+    fn test_load_from_path_invalid_yaml() {
+        let config_content = "invalid: yaml: content: [";
+        let (file_path, _dir) = create_test_config(config_content);
+        
+        let config = Config::load_from_path(&file_path);
+        assert!(config.is_err());
+        assert!(config.unwrap_err().to_string().contains("Configuration file parsing error"));
+    }
+
+    #[test]
+    fn test_load_from_path_nonexistent_file() {
+        let dir = tempdir().unwrap();
+        let nonexistent_path = dir.path().join("nonexistent.yaml");
+        
+        let config = Config::load_from_path(&nonexistent_path);
+        assert!(config.is_err());
+    }
+
+    #[test]
+    fn test_load_from_path_invalid_config() {
+        let config_content = r#"
+model: ""  # Empty model is invalid
+api_endpoint: not-a-url
+default_temperature: 3.0  # Out of range
+default_frequency_penalty: 0.0
+default_number_of_choices: 3
+disable_print_as_stream: false
+disable_auto_update_check: false
+system_msg: "Test message"
+"#;
+        let (file_path, _dir) = create_test_config(config_content);
+        
+        let config = Config::load_from_path(&file_path);
+        assert!(config.is_err());
+        let err = config.unwrap_err().to_string();
+        assert!(err.contains("model"));  // Should mention empty model error
+        assert!(err.contains("api_endpoint"));  // Should mention invalid URL error
+        assert!(err.contains("temperature"));  // Should mention temperature range error
+    }
+
+    #[test]
+    fn test_load_from_path_empty_system_msg() {
+        let config_content = r#"
+model: "gpt-4"
+api_endpoint: "https://api.openai.com/v1/chat/completions"
+default_temperature: 1.0
+default_frequency_penalty: 0.0
+default_number_of_choices: 3
+disable_print_as_stream: false
+disable_auto_update_check: false
+system_msg: ""
+"#;
+        let (file_path, _dir) = create_test_config(config_content);
+        
+        let config = Config::load_from_path(&file_path);
+        assert!(config.is_err());
+        let err = config.unwrap_err().to_string();
+        assert!(err.contains("system_msg"));  // Should mention system message error
+        assert!(err.contains("Default system message:"));  // Should show default message
     }
 }
