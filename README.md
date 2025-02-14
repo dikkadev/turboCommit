@@ -60,6 +60,7 @@ After generating commit messages, you can:
 - `-d, --debug` - Show basic debug info in console
 - `--debug-file <path>` - Write detailed debug logs to file (use '-' for stdout)
 - `--auto-commit` - Automatically commit with the generated message
+- `--amend` - Amend the last commit with the generated message (useful with Git hooks)
 - `--api-key <key>` - Provide API key directly
 - `--api-endpoint <url>` - Custom API endpoint URL
 - `-p, --print-once` - Disable streaming output
@@ -157,3 +158,60 @@ Contributions are welcome! Feel free to open issues and pull requests.
 ## License
 
 Licensed under MIT - see the [LICENSE](LICENSE) file for details.
+
+### Using turboCommit with --amend
+
+The `--amend` option allows you to change the commit message of your last commit. This is useful when:
+- You want to improve the message of your last commit
+- You want to fix a typo in your commit message
+- You want to add more context to your commit message
+
+Usage:
+```bash
+# First, make sure you have no staged changes
+git status  # Should show no staged changes
+
+# Then use --amend to improve the last commit's message
+turbocommit --amend  # This will analyze the last commit's changes and suggest a new message
+```
+
+Important Notes:
+- When using `--amend`, you must not have any staged changes
+- The tool will analyze only the changes from your last commit
+- If you want to include new changes in the amended commit:
+  1. Either commit them first normally, then amend that commit
+  2. Or use `git commit --amend` manually to include them
+
+You can also combine this with auto-commit for a quick message update:
+```bash
+turbocommit --amend --auto-commit  # Automatically amend with the first generated message
+```
+
+### Using turboCommit with Git Hooks
+
+If your project uses Git hooks (e.g., linters, formatters), here's how to use turboCommit effectively:
+
+1. Stage and commit your changes normally:
+```bash
+git add .
+turbocommit
+```
+
+2. If hooks fail:
+   - Fix the issues reported by hooks
+   - Stage the fixed files (`git add .`)
+   - Commit again
+
+3. If you want to improve the commit message after all hooks pass:
+```bash
+# Make sure you have no staged changes
+git status
+
+# Then improve the message
+turbocommit --amend  # This will analyze the commit and suggest a better message
+```
+
+This workflow ensures that:
+- Code quality checks run before the commit
+- You can improve the commit message after all checks pass
+- The final commit message is high-quality and descriptive
