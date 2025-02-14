@@ -126,14 +126,14 @@ impl Actor {
 
             match Task::from_str(task) {
                 Task::Commit => {
-                    match git::commit(message) {
+                    match git::commit(message, self.options.amend) {
                         Ok(_) => {}
                         Err(e) => {
                             println!("{e}");
                             process::exit(1);
                         }
                     };
-                    println!("{} 🎉", "Commit successful!".purple());
+                    println!("{} 🎉", if self.options.amend { "Commit message amended!" } else { "Commit successful!" }.purple());
                     break;
                 }
                 Task::Edit => {
@@ -177,7 +177,7 @@ impl Actor {
             return Err(anyhow::anyhow!("No commit message generated"));
         }
         let message = choices[0].clone();
-        git::commit(message.clone())?;
+        git::commit(message.clone(), self.options.amend)?;
         Ok(message)
     }
 }

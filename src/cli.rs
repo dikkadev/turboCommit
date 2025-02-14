@@ -25,6 +25,7 @@ pub struct Options {
     pub debug_file: Option<String>,
     pub always_select_files: bool,
     pub config_file: Option<String>,
+    pub amend: bool,
 }
 
 impl From<&Config> for Options {
@@ -48,6 +49,7 @@ impl From<&Config> for Options {
             debug_file: None,
             always_select_files: false,
             config_file: None,
+            amend: false,
         }
     }
 }
@@ -130,6 +132,9 @@ impl Options {
                     opts.auto_commmit = true;
                     opts.n = 1;
                     opts.print_once = true;
+                }
+                "--amend" => {
+                    opts.amend = true;
                 }
                 "--check-version" => {
                     opts.check_version_only = true;
@@ -259,6 +264,7 @@ fn help() {
             .bright_black()
     );
     println!("  --auto-commit  Automatically generate and commit a single message\n");
+    println!("  --amend  Amend the last commit with the generated message\n");
     println!("  --check-version  Check for updates and exit\n");
     println!("  --api-endpoint <url>  Set the API endpoint URL\n");
     println!("  --system-msg-file <path>  Load system message from a file\n");

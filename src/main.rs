@@ -72,17 +72,42 @@ async fn main() -> anyhow::Result<()> {
     let system_len = openai::count_token(options.system_msg.as_ref().unwrap_or(&config.system_msg)).unwrap_or(0);
     let extra_len = openai::count_token(&options.msg).unwrap_or(0);
 
-    let (diff, diff_tokens) =
-        util::decide_diff(&repo, system_len + extra_len, options.model.context_size(), options.always_select_files)?;
-
+    // Add system message first
     actor.add_message(Message::system(options.system_msg.unwrap_or(config.system_msg.clone())));
-    actor.add_message(Message::user(diff));
 
+    // Handle amend mode
+    if options.amend {
+        // When amending, we don't want any staged files
+        if git::has_staged_changes(&repo)? {
+            println!("{}", "Error: You have staged changes.".red());
+            println!("{}", "When using --amend, you should not have any staged changes.".bright_black());
+            println!("{}", "The --amend option only changes the commit message of the last commit.".bright_black());
+            println!("{}", "If you want to include new changes, either:".bright_black());
+            println!("{}", "1. Commit them first normally, then amend that commit".bright_black());
+            println!("{}", "2. Or use git commit --amend manually to include them".bright_black());
+            process::exit(1);
+        }
+
+        // Get the diff from the last commit
+        let diff = git::get_last_commit_diff(&repo)?;
+        if diff.is_empty() {
+            println!("{}", "Error: Could not get changes from the last commit.".red());
+            println!("{}", "Make sure you have at least one commit in your repository.".bright_black());
+            process::exit(1);
+        }
+        actor.add_message(Message::user(diff));
+        actor.used_tokens = system_len + extra_len;
+    } else {
+        // Normal commit mode - get diff from staged changes
+        let (diff, diff_tokens) = util::decide_diff(&repo, system_len + extra_len, options.model.context_size(), options.always_select_files)?;
+        actor.add_message(Message::user(diff));
+        actor.used_tokens = system_len + extra_len + diff_tokens;
+    }
+
+    // Add any extra message from command line
     if !options.msg.is_empty() {
         actor.add_message(Message::user(options.msg));
     }
-
-    actor.used_tokens = system_len + extra_len + diff_tokens;
 
     if options.auto_commmit {
         let _ = actor.auto_commit().await?;
