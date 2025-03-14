@@ -128,7 +128,7 @@ impl Options {
                         };
                     }
                 }
-                "--auto-commit" => {
+                "-a" | "--auto-commit" => {
                     opts.auto_commmit = true;
                     opts.n = 1;
                     opts.print_once = true;
@@ -263,7 +263,7 @@ fn help() {
         "(https://platform.openai.com/docs/api-reference/chat/create#chat/create-frequency-penalty)"
             .bright_black()
     );
-    println!("  --auto-commit  Automatically generate and commit a single message\n");
+    println!("  -a, --auto-commit  Automatically generate and commit a single message\n");
     println!("  --amend  Amend the last commit with the generated message\n");
     println!("  --check-version  Check for updates and exit\n");
     println!("  --api-endpoint <url>  Set the API endpoint URL\n");
