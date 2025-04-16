@@ -1,6 +1,6 @@
 [package]
 name = "turbocommit"
-version = "1.5.3"
+version = "1.5.4"
 edition = "2021"
 authors = [ "dikkadev",]
 description = "A CLI tool to create commit messages with OpenAI GPT models"
@@ -18,7 +18,7 @@ crates_io_api = "0.8.1"
 crossterm = "0.26.1"
 edit = "0.1.4"
 futures = "0.3.27"
-git2 = "0.16.1"
+git2 = "0.18.2"
 home = "0.5.4"
 inquire = "0.6.0"
 reqwest-eventsource = "0.4.0"
