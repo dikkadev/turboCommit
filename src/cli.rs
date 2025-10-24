@@ -26,6 +26,9 @@ pub struct Options {
     pub always_select_files: bool,
     pub config_file: Option<String>,
     pub amend: bool,
+    // Jujutsu VCS specific options
+    pub jj_revision: Option<String>,
+    pub jj_rewrite: bool,
 }
 
 impl From<&Config> for Options {
@@ -50,6 +53,8 @@ impl From<&Config> for Options {
             always_select_files: false,
             config_file: None,
             amend: false,
+            jj_revision: None,
+            jj_rewrite: config.jj_rewrite_default,
         }
     }
 }
@@ -179,7 +184,7 @@ impl Options {
                         opts.reasoning_effort = Some(effort);
                     }
                 }
-                "-r" | "--enable-reasoning" => {
+                "--reason" | "--enable-reasoning" => {
                     opts.enable_reasoning = true;
                     if opts.reasoning_effort.is_none() {
                         opts.reasoning_effort = Some("medium".to_string());
@@ -203,6 +208,14 @@ impl Options {
                     if let Some(path) = iter.next() {
                         opts.config_file = Some(path);
                     }
+                }
+                "-r" | "--revision" => {
+                    if let Some(rev) = iter.next() {
+                        opts.jj_revision = Some(rev);
+                    }
+                }
+                "--rw" => {
+                    opts.jj_rewrite = !opts.jj_rewrite;
                 }
                 "-h" | "--help" => help(),
                 "-v" | "--version" => {
@@ -270,7 +283,7 @@ fn help() {
     println!("  --system-msg-file <path>  Load system message from a file\n");
     println!("  --disable-auto-update-check  Disable automatic update checks\n");
     println!("  --api-key <key>  Set the API key\n");
-    println!("  -r, --enable-reasoning  Enable support for models with reasoning capabilities (like o-series)\n");
+    println!("  --reason, --enable-reasoning  Enable support for models with reasoning capabilities (like o-series)\n");
     println!("  --reasoning-effort <effort>  Set the reasoning effort (defaults to 'medium', common values: low, medium, high)\n");
     println!("                              Note: Valid values depend on the model and service being used\n");
     println!("  -d, --debug  Enable debug mode (prints basic request/response info)\n");
@@ -278,6 +291,8 @@ fn help() {
     println!("                       Use '-' to write to stdout instead of a file\n");
     println!("  --select-files  Always prompt for file selection, regardless of token count\n");
     println!("  -c, --config <path>  Set the config file path\n");
+    println!("  -r, --revision <rev>  Set the Jujutsu revision to describe (default: current working directory)\n");
+    println!("  --rw  Toggle rewrite mode (inverts config default)\n");
     println!("Anything else will be concatenated into an extra message given to the AI\n");
     println!("You can change the defaults for these options and the system message prompt in the config file, that is created the first time running the program\n{}",
         home::home_dir().unwrap_or_else(|| "".into()).join(".turbocommit.yaml").display());
@@ -370,7 +385,7 @@ mod tests {
         let args = vec![
             "turbocommit",
             "-d",
-            "-r",
+            "--reason",
             "--model",
             "o3-mini",
         ];

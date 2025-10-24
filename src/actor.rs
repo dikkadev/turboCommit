@@ -6,7 +6,7 @@ use crossterm::style::Print;
 use inquire::Select;
 
 use crate::cli::Options;
-use crate::{git, openai, util, debug_log::DebugLogger};
+use crate::{git, jj, openai, util, debug_log::DebugLogger};
 
 pub struct Actor {
     messages: Vec<openai::Message>,
@@ -15,10 +15,11 @@ pub struct Actor {
     pub used_tokens: usize,
     api_endpoint: String,
     debug_logger: DebugLogger,
+    vcs_type: jj::VcsType,
 }
 
 impl Actor {
-    pub fn new(options: Options, api_key: String, api_endpoint: String) -> Self {
+    pub fn new(options: Options, api_key: String, api_endpoint: String, vcs_type: jj::VcsType) -> Self {
         // Get debug_file before moving options
         let debug_file = options.debug_file.clone();
         Self {
@@ -28,6 +29,7 @@ impl Actor {
             used_tokens: 0,
             api_endpoint,
             debug_logger: DebugLogger::new(debug_file),
+            vcs_type,
         }
     }
 
@@ -126,14 +128,28 @@ impl Actor {
 
             match Task::from_str(task) {
                 Task::Commit => {
-                    match git::commit(message, self.options.amend) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            println!("{e}");
-                            process::exit(1);
+                    match self.vcs_type {
+                        jj::VcsType::Git => {
+                            match git::commit(message, self.options.amend) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    println!("{e}");
+                                    process::exit(1);
+                                }
+                            };
+                            println!("{} 🎉", if self.options.amend { "Commit message amended!" } else { "Commit successful!" }.purple());
                         }
-                    };
-                    println!("{} 🎉", if self.options.amend { "Commit message amended!" } else { "Commit successful!" }.purple());
+                        jj::VcsType::Jujutsu => {
+                            match jj::set_jj_description(self.options.jj_revision.as_deref(), &message) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    println!("{e}");
+                                    process::exit(1);
+                                }
+                            };
+                            println!("{} 🎉", "Description set successfully!".purple());
+                        }
+                    }
                     break;
                 }
                 Task::Edit => {
@@ -177,7 +193,16 @@ impl Actor {
             return Err(anyhow::anyhow!("No commit message generated"));
         }
         let message = choices[0].clone();
-        git::commit(message.clone(), self.options.amend)?;
+        
+        match self.vcs_type {
+            jj::VcsType::Git => {
+                git::commit(message.clone(), self.options.amend)?;
+            }
+            jj::VcsType::Jujutsu => {
+                jj::set_jj_description(self.options.jj_revision.as_deref(), &message)?;
+            }
+        }
+        
         Ok(message)
     }
 }

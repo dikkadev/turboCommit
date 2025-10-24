@@ -37,6 +37,8 @@ pub struct Config {
     #[serde(default)]
     pub enable_reasoning: bool,
     #[serde(default)]
+    pub jj_rewrite_default: bool,
+    #[serde(default)]
     pub system_msg: String,
 }
 
@@ -52,6 +54,7 @@ impl Default for Config {
             disable_print_as_stream: false,
             disable_auto_update_check: false,
             enable_reasoning: false,
+            jj_rewrite_default: false, // Default to overwrite mode
             system_msg: String::from("You are a specialized AI that generates conventional commit messages based on git diffs. Your ONLY purpose is to produce properly formatted conventional commits that follow the exact specification at conventionalcommits.org.
 
 # INPUT AND RESPONSE FORMAT
