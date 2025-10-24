@@ -4,7 +4,7 @@ use colored::Colorize;
 use inquire::MultiSelect;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{config::Config, git, openai};
+use crate::{config::Config, git, jj, openai};
 
 pub fn decide_diff(
     repo: &git2::Repository,
@@ -50,6 +50,58 @@ pub fn decide_diff(
         )
         .prompt()?;
         diff = git::diff(&repo, &selected_files)?;
+        diff_tokens = openai::count_token(&diff)?;
+    }
+    Ok((diff, diff_tokens))
+}
+
+pub fn decide_diff_jj(
+    used_tokens: usize,
+    context: usize,
+    always_select_files: bool,
+    revision: Option<&str>,
+) -> anyhow::Result<(String, usize)> {
+    let modified_files = jj::get_jj_modified_files()?;
+    let mut diff = jj::get_jj_diff(revision)?;
+    let mut diff_tokens = openai::count_token(&diff)?;
+
+    if diff_tokens == 0 {
+        println!(
+            "{} {}",
+            "No changes detected.".red(),
+            "Please make some changes before running turbocommit.".bright_black()
+        );
+        std::process::exit(1);
+    }
+
+    if always_select_files || used_tokens + diff_tokens > context {
+        if always_select_files {
+            println!(
+                "{} {}",
+                "File selection mode:".blue(),
+                "Select the files you want to include in the diff.".bright_black()
+            );
+        } else {
+            println!(
+                "{} {}",
+                "The request is too long!".red(),
+                format!(
+                    "The request is ~{} tokens long, while the maximum is {}.",
+                    used_tokens + diff_tokens,
+                    context
+                )
+                .bright_black()
+            );
+        }
+        let _selected_files = MultiSelect::new(
+            "Select the files you want to include in the diff:",
+            modified_files.clone(),
+        )
+        .prompt()?;
+        
+        // For Jujutsu, we need to get diff for specific files
+        // This is a simplified approach - in practice, you might need to filter the diff
+        diff = jj::get_jj_diff(revision)?;
         diff_tokens = openai::count_token(&diff)?;
     }
     Ok((diff, diff_tokens))

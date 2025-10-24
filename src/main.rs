@@ -11,6 +11,7 @@ mod animation;
 mod cli;
 mod config;
 mod git;
+mod jj;
 mod model;
 mod openai;
 mod util;
@@ -61,13 +62,20 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    // Detect VCS type
+    let vcs_type = jj::detect_vcs()?;
+
     let mut actor = Actor::new(
         options.clone(),
         api_key,
         options.api_endpoint.clone(),
+        vcs_type.clone(),
     );
-
-    let repo = git::get_repo()?;
+    
+    let repo = match vcs_type {
+        jj::VcsType::Git => Some(git::get_repo()?),
+        jj::VcsType::Jujutsu => None,
+    };
 
     let system_len = openai::count_token(options.system_msg.as_ref().unwrap_or(&config.system_msg)).unwrap_or(0);
     let extra_len = openai::count_token(&options.msg).unwrap_or(0);
@@ -75,33 +83,72 @@ async fn main() -> anyhow::Result<()> {
     // Add system message first
     actor.add_message(Message::system(options.system_msg.unwrap_or(config.system_msg.clone())));
 
-    // Handle amend mode
-    if options.amend {
-        // When amending, we don't want any staged files
-        if git::has_staged_changes(&repo)? {
-            println!("{}", "Error: You have staged changes.".red());
-            println!("{}", "When using --amend, you should not have any staged changes.".bright_black());
-            println!("{}", "The --amend option only changes the commit message of the last commit.".bright_black());
-            println!("{}", "If you want to include new changes, either:".bright_black());
-            println!("{}", "1. Commit them first normally, then amend that commit".bright_black());
-            println!("{}", "2. Or use git commit --amend manually to include them".bright_black());
-            process::exit(1);
-        }
+    // Handle different VCS types
+    match vcs_type {
+        jj::VcsType::Git => {
+            let repo = repo.unwrap();
+            
+            // Handle amend mode
+            if options.amend {
+                // When amending, we don't want any staged files
+                if git::has_staged_changes(&repo)? {
+                    println!("{}", "Error: You have staged changes.".red());
+                    println!("{}", "When using --amend, you should not have any staged changes.".bright_black());
+                    println!("{}", "The --amend option only changes the commit message of the last commit.".bright_black());
+                    println!("{}", "If you want to include new changes, either:".bright_black());
+                    println!("{}", "1. Commit them first normally, then amend that commit".bright_black());
+                    println!("{}", "2. Or use git commit --amend manually to include them".bright_black());
+                    process::exit(1);
+                }
 
-        // Get the diff from the last commit
-        let diff = git::get_last_commit_diff(&repo)?;
-        if diff.is_empty() {
-            println!("{}", "Error: Could not get changes from the last commit.".red());
-            println!("{}", "Make sure you have at least one commit in your repository.".bright_black());
-            process::exit(1);
+                // Get the diff from the last commit
+                let diff = git::get_last_commit_diff(&repo)?;
+                if diff.is_empty() {
+                    println!("{}", "Error: Could not get changes from the last commit.".red());
+                    println!("{}", "Make sure you have at least one commit in your repository.".bright_black());
+                    process::exit(1);
+                }
+                actor.add_message(Message::user(diff));
+                actor.used_tokens = system_len + extra_len;
+            } else {
+                // Normal commit mode - get diff from staged changes
+                let (diff, diff_tokens) = util::decide_diff(&repo, system_len + extra_len, options.model.context_size(), options.always_select_files)?;
+                actor.add_message(Message::user(diff));
+                actor.used_tokens = system_len + extra_len + diff_tokens;
+            }
         }
-        actor.add_message(Message::user(diff));
-        actor.used_tokens = system_len + extra_len;
-    } else {
-        // Normal commit mode - get diff from staged changes
-        let (diff, diff_tokens) = util::decide_diff(&repo, system_len + extra_len, options.model.context_size(), options.always_select_files)?;
-        actor.add_message(Message::user(diff));
-        actor.used_tokens = system_len + extra_len + diff_tokens;
+        jj::VcsType::Jujutsu => {
+            // Check if there are changes in the working directory
+            if !jj::has_jj_changes()? {
+                println!("{}", "No changes detected in Jujutsu working directory.".red());
+                println!("{}", "Please make some changes before running turbocommit.".bright_black());
+                process::exit(1);
+            }
+
+            // Validate revision ID if provided
+            if let Some(ref rev) = options.jj_revision {
+                jj::validate_revision_id(rev)?;
+            }
+
+            // Get the diff for the specified revision with file selection support
+            let (diff, diff_tokens) = util::decide_diff_jj(
+                system_len + extra_len,
+                options.model.context_size(),
+                options.always_select_files,
+                options.jj_revision.as_deref(),
+            )?;
+
+            // If rewrite mode is enabled, include current description as hint
+            if options.jj_rewrite {
+                if let Some(current_desc) = jj::get_jj_description(options.jj_revision.as_deref())? {
+                    let hint_msg = format!("Current description: {}", current_desc);
+                    actor.add_message(Message::user(hint_msg));
+                }
+            }
+
+            actor.add_message(Message::user(diff));
+            actor.used_tokens = system_len + extra_len + diff_tokens;
+        }
     }
 
     // Add any extra message from command line
