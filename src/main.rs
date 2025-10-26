@@ -118,9 +118,14 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         jj::VcsType::Jujutsu => {
-            // Check if there are changes in the working directory
-            if !jj::has_jj_changes()? {
-                println!("{}", "No changes detected in Jujutsu working directory.".red());
+            // Check if there are changes for the specified revision (or working directory if none specified)
+            if !jj::has_jj_changes_for_revision(options.jj_revision.as_deref())? {
+                let revision_msg = if let Some(ref rev) = options.jj_revision {
+                    format!("No changes detected in Jujutsu revision '{}'.", rev)
+                } else {
+                    "No changes detected in Jujutsu working directory.".to_string()
+                };
+                println!("{}", revision_msg.red());
                 println!("{}", "Please make some changes before running turbocommit.".bright_black());
                 process::exit(1);
             }

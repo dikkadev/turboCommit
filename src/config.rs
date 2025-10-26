@@ -133,9 +133,10 @@ fix(performance): optimize database query pagination
 Resolves timeout issues during high traffic periods by implementing cursor-based pagination instead of offset-based, dramatically reducing query execution time.
 
 # ADDITIONAL INSTRUCTIONS
-- If a \"Description: \" hint is provided, treat it as soft guidance to rewrite the commit: extract its intent/motivation and incorporate it while still adhering to all rules above
-- Do NOT copy the hint verbatim; normalize phrasing (imperative, lowercased start, no trailing period) and ensure correctness with the actual diff
-- If the hint conflicts with the diff, prefer the diff; otherwise use the hint to clarify WHY and to choose type/scope/wording
+- If a \"Description: \" hint is provided, you MUST actively leverage it: analyze and extract its core intent, motivation, and messaging direction
+- The hint reflects the user's understanding of WHY the change matters; use it to strongly shape your type/scope/body choices and to emphasize key reasoning
+- Always reword the hint to follow conventional commit style (imperative mood, lowercase start, no period), but preserve and prioritize its semantic content
+- Only contradict hint content if it factually conflicts with the diff; otherwise trust and fully incorporate the hint's framing and emphasis
 - User may provide specific instructions or additional context - incorporate only if relevant
 - User may ask for revisions - be responsive to feedback
 - NEVER include explanations about your reasoning or analysis - ONLY output the commit message
