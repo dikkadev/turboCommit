@@ -6,6 +6,7 @@ use jj_lib::repo::Repo as _;
 use jj_lib::settings::UserSettings;
 use jj_lib::workspace::Workspace;
 use jj_lib::backend::TreeValue;
+use jj_lib::object_id::ObjectId;
 use futures::StreamExt;
 use pollster::FutureExt;
 use tokio::io::AsyncReadExt;
@@ -48,22 +49,89 @@ pub fn detect_vcs() -> anyhow::Result<VcsType> {
     Err(anyhow::anyhow!("No supported VCS repository found. Please run this command from within a git or jj repository."))
 }
 
-/// Validates that a revision string is a simple ID (not a complex expression)
+/// Validates that a revision string is safe and not a complex expression
 pub fn validate_revision_id(rev: &str) -> anyhow::Result<()> {
-    // Simple validation: should be alphanumeric with possible hyphens
-    // This prevents complex expressions like ranges, functions, etc.
+    // Simple validation: should not be empty
     if rev.is_empty() {
         return Err(anyhow::anyhow!("Revision cannot be empty"));
     }
     
-    // Allow alphanumeric characters, hyphens, and dots (for commit hashes)
-    if !rev.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '.') {
+    // Reject potentially dangerous characters or complex expressions
+    // Allow alphanumeric, hyphens, underscores, dots, colons (for git refs)
+    // but reject pipes, semicolons, parentheses, and other shell metacharacters
+    if !rev.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == ':') {
         return Err(anyhow::anyhow!(
-            "Revision must be a simple ID (alphanumeric, hyphens, dots only). Complex expressions are not supported."
+            "Revision contains invalid characters. Only alphanumeric characters, hyphens, underscores, dots, and colons are allowed."
         ));
     }
     
     Ok(())
+}
+
+/// Resolves a revision string to a commit ID
+/// Supports full hex hashes, commit ID prefixes, and change ID abbreviations (jj display format)
+fn resolve_revision_to_commit_id(repo: &std::sync::Arc<jj_lib::repo::ReadonlyRepo>, rev: &str) -> anyhow::Result<jj_lib::backend::CommitId> {
+    // First try to parse as a full hex string (full commit ID)
+    if let Some(commit_id) = jj_lib::backend::CommitId::try_from_hex(rev) {
+        return Ok(commit_id);
+    }
+    
+    // For non-hex revisions, search through all commits
+    let view = repo.view();
+    let store = repo.store();
+    let mut commit_matches = Vec::new();
+    let mut to_visit = Vec::new();
+    let mut visited = std::collections::HashSet::new();
+    
+    // Start from all visible commit heads
+    for head_id in view.heads() {
+        if !visited.contains(head_id) {
+            to_visit.push(head_id.clone());
+        }
+    }
+    
+    while let Some(commit_id) = to_visit.pop() {
+        if !visited.insert(commit_id.clone()) {
+            continue;
+        }
+        
+        if let Ok(commit) = store.get_commit(&commit_id) {
+            let change_id = commit.change_id();
+            let change_id_reverse_hex = change_id.reverse_hex();
+            let commit_id_hex = commit_id.hex();
+            
+            // Check if commit ID (hex) starts with the given prefix
+            if commit_id_hex.starts_with(rev) {
+                commit_matches.push(commit_id.clone());
+            }
+            // Check if change ID reverse_hex representation starts with the prefix
+            // This matches jj's display format for change IDs (e.g., "yqqrnkkn")
+            else if change_id_reverse_hex.starts_with(rev) {
+                commit_matches.push(commit_id.clone());
+            }
+            
+            for parent_id in commit.parent_ids() {
+                if !visited.contains(parent_id) {
+                    to_visit.push(parent_id.clone());
+                }
+            }
+        }
+    }
+    
+    // Handle results
+    if commit_matches.len() == 1 {
+        Ok(commit_matches.into_iter().next().unwrap())
+    } else if commit_matches.is_empty() {
+        Err(anyhow::anyhow!(
+            "Invalid revision '{}': could not find matching commit or change. Use 'jj log' to see available commits.",
+            rev
+        ))
+    } else {
+        Err(anyhow::anyhow!(
+            "Ambiguous revision '{}': matches multiple commits. Use a longer prefix.",
+            rev
+        ))
+    }
 }
 
 /// Gets the diff for Jujutsu VCS
@@ -84,9 +152,8 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
             .ok_or_else(|| anyhow::anyhow!("No working copy commit found"))?;
         repo.store().get_commit(wc_commit_id)?
     } else {
-        // Parse revision as commit ID
-        let commit_id = jj_lib::backend::CommitId::try_from_hex(rev)
-            .ok_or_else(|| anyhow::anyhow!("Invalid commit ID: {}", rev))?;
+        // Resolve revision using jj's index for prefix matching
+        let commit_id = resolve_revision_to_commit_id(&repo, rev)?;
         repo.store().get_commit(&commit_id)?
     };
     
@@ -302,9 +369,8 @@ pub fn get_jj_description(revision: Option<&str>) -> anyhow::Result<Option<Strin
             .ok_or_else(|| anyhow::anyhow!("No working copy commit found"))?;
         repo.store().get_commit(wc_commit_id)?
     } else {
-        // Parse revision as commit ID
-        let commit_id = jj_lib::backend::CommitId::try_from_hex(rev)
-            .ok_or_else(|| anyhow::anyhow!("Invalid commit ID: {}", rev))?;
+        // Resolve revision using jj's index for prefix matching
+        let commit_id = resolve_revision_to_commit_id(&repo, rev)?;
         repo.store().get_commit(&commit_id)?
     };
     
@@ -325,8 +391,9 @@ pub fn set_jj_description(_revision: Option<&str>, _description: &str) -> anyhow
     Err(anyhow::anyhow!("Setting jj descriptions is not yet implemented with jj-lib"))
 }
 
-/// Checks if there are any changes in the working directory for Jujutsu
-pub fn has_jj_changes() -> anyhow::Result<bool> {
+/// Checks if there are any changes for a specific revision in Jujutsu
+/// If revision is None, checks the working directory (@)
+pub fn has_jj_changes_for_revision(revision: Option<&str>) -> anyhow::Result<bool> {
     let config = StackedConfig::with_defaults();
     let user_settings = UserSettings::from_config(config)?;
     let store_factories = jj_lib::repo::StoreFactories::default();
@@ -335,17 +402,25 @@ pub fn has_jj_changes() -> anyhow::Result<bool> {
     let workspace = Workspace::load(&user_settings, Path::new("."), &store_factories, &working_copy_factories)?;
     let repo = workspace.repo_loader().load_at_head()?;
     
-    // Get the working copy commit
-    let wc_commit_id = repo.view().get_wc_commit_id(workspace.workspace_name())
-        .ok_or_else(|| anyhow::anyhow!("No working copy commit found"))?;
-    let wc_commit = repo.store().get_commit(wc_commit_id)?;
+    // Resolve revision (default to @)
+    let rev = revision.unwrap_or("@");
+    let commit = if rev == "@" {
+        // Get the working copy commit
+        let wc_commit_id = repo.view().get_wc_commit_id(workspace.workspace_name())
+            .ok_or_else(|| anyhow::anyhow!("No working copy commit found"))?;
+        repo.store().get_commit(wc_commit_id)?
+    } else {
+        // Resolve revision using jj's index for prefix matching
+        let commit_id = resolve_revision_to_commit_id(&repo, rev)?;
+        repo.store().get_commit(&commit_id)?
+    };
     
     // Get the parent tree
-    let _parent_tree = wc_commit.parent_tree(repo.as_ref())?;
-    let _current_tree = wc_commit.tree()?;
+    let parent_tree = commit.parent_tree(repo.as_ref())?;
+    let current_tree = commit.tree()?;
     
     // Check if trees are different
-    Ok(_parent_tree.id() != _current_tree.id())
+    Ok(parent_tree.id() != current_tree.id())
 }
 
 /// Gets the list of modified files for Jujutsu
