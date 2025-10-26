@@ -61,11 +61,11 @@ Notes:
 - With an invalid key, expect HTTP 401 from OpenAI (confirms plumbing).
 
 ## Run against prepared Jj repo (current limitation)
-- Container’s `jj` is 0.34.x; `jj status --porcelain` is not supported and the CLI will fail early with:
-  - `error: unexpected argument '--porcelain'`
-- Until the CLI is adjusted, skip Jj-based runs or use the Git repo for validation.
+- The CLI uses the `jj-lib` API directly to interact with Jj repositories, rather than invoking shell commands like `jj status --porcelain`.
+- Compatibility issues may arise if the container's Jj version is outdated or if the API has breaking changes.
+- Until the CLI is adjusted for full compatibility, skip Jj-based runs or use the Git repo for validation.
 ```bash
-# Example invocation (will fail due to jj flag)
+# Example invocation (may fail due to Jj API incompatibility)
 devcontainer exec --workspace-folder /home/dikka/projs/turbocommit/cursor/unified-vcs-description-handler-68c9 bash -lc 'export OPENAI_API_KEY=sk-REDACTED && cd /tmp/testenv/jj-repo && /workspace/target/debug/turbocommit --print-once -n 1 --model gpt-4o-mini --enable-reasoning'
 ```
 

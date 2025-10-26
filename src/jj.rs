@@ -6,7 +6,6 @@ use jj_lib::repo::Repo as _;
 use jj_lib::settings::UserSettings;
 use jj_lib::workspace::Workspace;
 use jj_lib::backend::TreeValue;
-use jj_lib::object_id::ObjectId;
 use futures::StreamExt;
 use pollster::FutureExt;
 use tokio::io::AsyncReadExt;
@@ -134,6 +133,140 @@ fn resolve_revision_to_commit_id(repo: &std::sync::Arc<jj_lib::repo::ReadonlyRep
     }
 }
 
+/// Gets the diff for Jujutsu VCS for specific files
+pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow::Result<String> {
+    let config = StackedConfig::with_defaults();
+    let user_settings = UserSettings::from_config(config)?;
+    let store_factories = jj_lib::repo::StoreFactories::default();
+    let working_copy_factories = jj_lib::workspace::default_working_copy_factories();
+    
+    let workspace = Workspace::load(&user_settings, Path::new("."), &store_factories, &working_copy_factories)?;
+    let repo = workspace.repo_loader().load_at_head()?;
+    
+    // Resolve revision (default to @)
+    let rev = revision.unwrap_or("@");
+    let commit = if rev == "@" {
+        // Get the working copy commit
+        let wc_commit_id = repo.view().get_wc_commit_id(workspace.workspace_name())
+            .ok_or_else(|| anyhow::anyhow!("No working copy commit found"))?;
+        repo.store().get_commit(wc_commit_id)?
+    } else {
+        // Resolve revision using jj's index for prefix matching
+        let commit_id = resolve_revision_to_commit_id(&repo, rev)?;
+        repo.store().get_commit(&commit_id)?
+    };
+    
+    let tree = commit.tree()?;
+    let parent_tree = commit.parent_tree(repo.as_ref())?;
+    
+    // Generate proper diff using jj-lib API
+    // tree and parent_tree are already MergedTree instances
+    let merged_tree = tree;
+    let merged_parent_tree = parent_tree;
+    let matcher = EverythingMatcher;
+    
+    let diff_stream = merged_tree.diff_stream(&merged_parent_tree, &matcher);
+    let mut diff_result = String::new();
+    
+    // Collect all diff entries and iterate through them
+    let entries: Vec<jj_lib::merged_tree::TreeDiffEntry> = diff_stream.collect::<Vec<_>>().block_on();
+    for entry in entries {
+        let path = &entry.path;
+        let path_str = path.as_internal_file_string();
+        
+        // Only include files that are in the selected list
+        if !files.contains(&path_str) {
+            continue;
+        }
+        
+        // Get source (before) and target (after) values
+        let diff = entry.values.as_ref().map_err(|e| anyhow::anyhow!("Diff error: {}", e))?;
+        let source_value = &diff.before;
+        let target_value = &diff.after;
+        
+        // Determine change type and generate appropriate diff
+        match (source_value.as_resolved(), target_value.as_resolved()) {
+            // File deleted
+            (Some(Some(TreeValue::File { id: source_id, .. })), None) => {
+                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+                diff_result.push_str(&format!("deleted file mode 100644\n"));
+                diff_result.push_str(&format!("--- a/{}\n", path_str));
+                diff_result.push_str(&format!("+++ /dev/null\n"));
+                
+                let content = read_file_content(repo.store(), path, &source_id).block_on()?;
+                diff_result.push_str(&format_deletion(&content));
+            }
+            
+            // File added
+            (None, Some(Some(TreeValue::File { id: target_id, .. }))) => {
+                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+                diff_result.push_str(&format!("new file mode 100644\n"));
+                diff_result.push_str(&format!("--- /dev/null\n"));
+                diff_result.push_str(&format!("+++ b/{}\n", path_str));
+                
+                let content = read_file_content(repo.store(), path, &target_id).block_on()?;
+                diff_result.push_str(&format_addition(&content));
+            }
+            
+            // File modified
+            (
+                Some(Some(TreeValue::File { id: source_id, executable: source_exec, .. })),
+                Some(Some(TreeValue::File { id: target_id, executable: target_exec, .. }))
+            ) if source_id != target_id || source_exec != target_exec => {
+                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+                
+                if source_exec != target_exec {
+                    if *target_exec {
+                        diff_result.push_str("old mode 100644\n");
+                        diff_result.push_str("new mode 100755\n");
+                    } else {
+                        diff_result.push_str("old mode 100755\n");
+                        diff_result.push_str("new mode 100644\n");
+                    }
+                }
+                
+                diff_result.push_str(&format!("--- a/{}\n", path_str));
+                diff_result.push_str(&format!("+++ b/{}\n", path_str));
+                
+                let source_content = read_file_content(repo.store(), path, &source_id).block_on()?;
+                let target_content = read_file_content(repo.store(), path, &target_id).block_on()?;
+                
+                diff_result.push_str(&format_unified_diff(
+                    &source_content,
+                    &target_content,
+                )?);
+            }
+            
+            // Symlink changes
+            (Some(Some(TreeValue::Symlink(source_id))), Some(Some(TreeValue::Symlink(target_id))))
+                if source_id != target_id => {
+                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+                diff_result.push_str(&format!("--- a/{}\n", path_str));
+                diff_result.push_str(&format!("+++ b/{}\n", path_str));
+                diff_result.push_str("@@ -1 +1 @@\n");
+                
+                let source_target = read_symlink(repo.store(), path, &source_id).block_on()?;
+                let target_target = read_symlink(repo.store(), path, &target_id).block_on()?;
+                diff_result.push_str(&format!("-{}\n", source_target));
+                diff_result.push_str(&format!("+{}\n", target_target));
+            }
+            
+            // File type changes (e.g., file to symlink)
+            (Some(Some(source)), Some(Some(target))) if std::mem::discriminant(source) != std::mem::discriminant(target) => {
+                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+                diff_result.push_str(&format!("--- a/{}\n", path_str));
+                diff_result.push_str(&format!("+++ b/{}\n", path_str));
+                diff_result.push_str(&format!("File type changed\n"));
+            }
+            
+            // No change or unsupported
+            _ => {}
+        }
+    }
+    
+    Ok(diff_result)
+}
+
 /// Gets the diff for Jujutsu VCS
 pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
     let config = StackedConfig::with_defaults();
@@ -231,7 +364,6 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
                 diff_result.push_str(&format_unified_diff(
                     &source_content,
                     &target_content,
-                    3, // context lines
                 )?);
             }
             
@@ -316,7 +448,6 @@ fn format_deletion(content: &[u8]) -> String {
 fn format_unified_diff(
     source: &[u8],
     target: &[u8],
-    _context_lines: usize,
 ) -> anyhow::Result<String> {
     let source_text = String::from_utf8_lossy(source);
     let target_text = String::from_utf8_lossy(target);
@@ -326,25 +457,42 @@ fn format_unified_diff(
     
     let mut output = String::new();
     
-    // Simple line-by-line diff for now
-    let max_lines = source_lines.len().max(target_lines.len());
-    
-    for i in 0..max_lines {
-        let source_line = source_lines.get(i).unwrap_or(&"");
-        let target_line = target_lines.get(i).unwrap_or(&"");
-        
-        if source_line != target_line {
-            if !output.contains("@@") {
-                output.push_str(&format!("@@ -{},{} +{},{} @@\n", 
-                    i + 1, source_lines.len(), i + 1, target_lines.len()));
+    // Track hunks
+    let mut i = 0;
+    while i < source_lines.len().max(target_lines.len()) {
+        // Find the start of a change region
+        if source_lines.get(i).unwrap_or(&"") != target_lines.get(i).unwrap_or(&"") {
+            let hunk_start = i;
+            let mut hunk_len = 0;
+            // Find the end of the contiguous change region
+            while i < source_lines.len().max(target_lines.len())
+                && source_lines.get(i).unwrap_or(&"") != target_lines.get(i).unwrap_or(&"")
+            {
+                hunk_len += 1;
+                i += 1;
             }
-            
-            if !source_line.is_empty() {
-                output.push_str(&format!("-{}\n", source_line));
+            // Calculate hunk header line numbers and counts
+            let src_hunk_start = hunk_start + 1;
+            let tgt_hunk_start = hunk_start + 1;
+            let src_hunk_count = hunk_len;
+            let tgt_hunk_count = hunk_len;
+            output.push_str(&format!(
+                "@@ -{},{} +{},{} @@\n",
+                src_hunk_start, src_hunk_count, tgt_hunk_start, tgt_hunk_count
+            ));
+            // Output the changed lines in the hunk
+            for j in hunk_start..(hunk_start + hunk_len) {
+                let source_line = source_lines.get(j).unwrap_or(&"");
+                let target_line = target_lines.get(j).unwrap_or(&"");
+                if !source_line.is_empty() {
+                    output.push_str(&format!("-{}\n", source_line));
+                }
+                if !target_line.is_empty() {
+                    output.push_str(&format!("+{}\n", target_line));
+                }
             }
-            if !target_line.is_empty() {
-                output.push_str(&format!("+{}\n", target_line));
-            }
+        } else {
+            i += 1;
         }
     }
     
@@ -385,10 +533,40 @@ pub fn get_jj_description(revision: Option<&str>) -> anyhow::Result<Option<Strin
 }
 
 /// Sets the description for a Jujutsu revision
-pub fn set_jj_description(_revision: Option<&str>, _description: &str) -> anyhow::Result<()> {
-    // For now, just return an error indicating this is not implemented
-    // TODO: Implement proper commit description setting
-    Err(anyhow::anyhow!("Setting jj descriptions is not yet implemented with jj-lib"))
+pub fn set_jj_description(revision: Option<&str>, description: &str) -> anyhow::Result<()> {
+    let config = StackedConfig::with_defaults();
+    let user_settings = UserSettings::from_config(config)?;
+    let store_factories = jj_lib::repo::StoreFactories::default();
+    let working_copy_factories = jj_lib::workspace::default_working_copy_factories();
+
+    let workspace = Workspace::load(&user_settings, Path::new("."), &store_factories, &working_copy_factories)?;
+    let mut repo = workspace.repo_loader().load_at_head()?;
+
+    // Resolve revision (default to @)
+    let rev = revision.unwrap_or("@");
+    let commit = if rev == "@" {
+        // Get the working copy commit
+        let wc_commit_id = repo.view().get_wc_commit_id(workspace.workspace_name())
+            .ok_or_else(|| anyhow::anyhow!("No working copy commit found"))?;
+        repo.store().get_commit(wc_commit_id)?
+    } else {
+        // Resolve revision using jj's index for prefix matching
+        let commit_id = resolve_revision_to_commit_id(&repo, rev)?;
+        repo.store().get_commit(&commit_id)?
+    };
+
+    // Create a new commit with the updated description
+    let new_commit = commit
+        .rewrite()
+        .set_description(description.to_string())
+        .write()?;
+
+    // If updating the working copy, update the repo view
+    if rev == "@" {
+        repo.record_working_copy_commit(workspace.workspace_name(), new_commit.id().clone());
+    }
+
+    Ok(())
 }
 
 /// Checks if there are any changes for a specific revision in Jujutsu
@@ -439,10 +617,17 @@ pub fn get_jj_modified_files() -> anyhow::Result<Vec<String>> {
     let wc_commit = repo.store().get_commit(wc_commit_id)?;
     
     // Get the parent tree
-    let _parent_tree = wc_commit.parent_tree(repo.as_ref())?;
-    let _current_tree = wc_commit.tree()?;
-    
-    // For now, just return empty list
-    // TODO: Implement proper file listing from tree diff
-    Ok(Vec::new())
+    let parent_tree = wc_commit.parent_tree(repo.as_ref())?;
+    let current_tree = wc_commit.tree()?;
+
+    // Compute the diff between parent and current tree
+    let mut modified_files = Vec::new();
+    for entry in parent_tree.diff(&current_tree, &EverythingMatcher) {
+        let (path, _change) = entry?;
+        // Convert path to string, skip if not valid UTF-8
+        if let Some(path_str) = path.to_str() {
+            modified_files.push(path_str.to_string());
+        }
+    }
+    Ok(modified_files)
 }
