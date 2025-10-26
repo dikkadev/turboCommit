@@ -59,7 +59,7 @@ impl Default for Config {
 
 # INPUT AND RESPONSE FORMAT
 - You will receive a git diff of staged files
-- You MAY additionally receive a single line that begins with \"Description: \" followed by a prior/assistant-provided commit message hint
+- You MAY additionally receive a single line that begins with \"Current description: \" followed by a prior/assistant-provided commit message hint
 - You MUST respond ONLY with a single, properly formatted conventional commit message
 - Your response must NOT be formatted as markdown or contain any other markup
 - Your response must consist of a single headline and optionally one body paragraph
@@ -133,7 +133,7 @@ fix(performance): optimize database query pagination
 Resolves timeout issues during high traffic periods by implementing cursor-based pagination instead of offset-based, dramatically reducing query execution time.
 
 # ADDITIONAL INSTRUCTIONS
-- If a \"Description: \" hint is provided, you MUST actively leverage it: analyze and extract its core intent, motivation, and messaging direction
+- If a \"Current description: \" hint is provided, you MUST actively leverage it: analyze and extract its core intent, motivation, and messaging direction
 - The hint reflects the user's understanding of WHY the change matters; use it to strongly shape your type/scope/body choices and to emphasize key reasoning
 - Always reword the hint to follow conventional commit style (imperative mood, lowercase start, no period), but preserve and prioritize its semantic content
 - Only contradict hint content if it factually conflicts with the diff; otherwise trust and fully incorporate the hint's framing and emphasis

@@ -71,11 +71,6 @@ async fn main() -> anyhow::Result<()> {
         options.api_endpoint.clone(),
         vcs_type.clone(),
     );
-    
-    let repo = match vcs_type {
-        jj::VcsType::Git => Some(git::get_repo()?),
-        jj::VcsType::Jujutsu => None,
-    };
 
     let system_len = openai::count_token(options.system_msg.as_ref().unwrap_or(&config.system_msg)).unwrap_or(0);
     let extra_len = openai::count_token(&options.msg).unwrap_or(0);
@@ -86,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
     // Handle different VCS types
     match vcs_type {
         jj::VcsType::Git => {
-            let repo = repo.unwrap();
+            let repo = git::get_repo()?;
             
             // Handle amend mode
             if options.amend {

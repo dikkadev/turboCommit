@@ -93,15 +93,14 @@ pub fn decide_diff_jj(
                 .bright_black()
             );
         }
-        let _selected_files = MultiSelect::new(
+        let selected_files = MultiSelect::new(
             "Select the files you want to include in the diff:",
             modified_files.clone(),
         )
         .prompt()?;
         
-        // For Jujutsu, we need to get diff for specific files
-        // This is a simplified approach - in practice, you might need to filter the diff
-        diff = jj::get_jj_diff(revision)?;
+        // Get diff for selected files only
+        diff = jj::get_jj_diff_for_files(revision, &selected_files)?;
         diff_tokens = openai::count_token(&diff)?;
     }
     Ok((diff, diff_tokens))
