@@ -215,3 +215,16 @@ This workflow ensures that:
 - Code quality checks run before the commit
 - You can improve the commit message after all checks pass
 - The final commit message is high-quality and descriptive
+
+## Dev Container test environment
+
+A disposable Dev Container is provided to safely develop and validate Git + Jujutsu (jj) integration. It includes the Rust toolchain, git and jj, and automatically prepares two throwaway repos inside the container at `/tmp/testenv/`.
+
+- What it’s for: Run experiments and upcoming integration checks in isolation, without touching real repositories.
+- How to use it:
+  - VS Code/Cursor: Command Palette → "Dev Containers: Reopen in Container".
+  - CLI:
+    ```bash
+    devcontainer up --workspace-folder .
+    devcontainer exec --workspace-folder . bash
+    ```
