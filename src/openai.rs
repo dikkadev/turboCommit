@@ -132,7 +132,7 @@ impl Request {
         temperature: f64,
         frequency_penalty: f64,
     ) -> Self {
-        if model.starts_with("o1") || model.starts_with("o3") {
+        if model.starts_with("o1") || model.starts_with("o3") || model.starts_with("gpt-5") {
             Self::OSeries(OSeriesRequest {
                 model,
                 messages,
@@ -508,6 +508,29 @@ mod tests {
                 // Success - o1 should use OSeries request
             }
             _ => panic!("Expected OSeriesRequest for o1 model"),
+        }
+    }
+
+    #[test]
+    fn test_gpt5_models_use_oseries_request() {
+        // Test all GPT-5 variants use OSeries (no temperature support)
+        let models = vec!["gpt-5", "gpt-5-nano", "gpt-5-mini", "gpt-5-codex"];
+        
+        for model_name in models {
+            let request = Request::new(
+                model_name.to_string(),
+                vec![Message::user("test".to_string())],
+                1,
+                1.0,
+                0.0,
+            );
+
+            match request {
+                Request::OSeries(_) => {
+                    // Success - GPT-5 models should use OSeries request
+                }
+                _ => panic!("Expected OSeriesRequest for {} model", model_name),
+            }
         }
     }
 
