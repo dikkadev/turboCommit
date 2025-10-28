@@ -51,7 +51,6 @@ impl Model {
             "gpt-5-nano" => 128000,
             "gpt-5-mini" => 128000,
             "gpt-5" => 200000,
-            "gpt-5-turbo" => 128000,
             "gpt-5-codex" => 128000,
             _ => usize::MAX,
         }
@@ -67,7 +66,6 @@ mod tests {
         assert_eq!(Model("gpt-5-nano".to_string()).context_size(), 128000);
         assert_eq!(Model("gpt-5-mini".to_string()).context_size(), 128000);
         assert_eq!(Model("gpt-5".to_string()).context_size(), 200000);
-        assert_eq!(Model("gpt-5-turbo".to_string()).context_size(), 128000);
         assert_eq!(Model("gpt-5-codex".to_string()).context_size(), 128000);
     }
 
