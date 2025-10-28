@@ -106,7 +106,8 @@ pub struct StandardRequest {
     pub model: String,
     pub messages: Vec<Message>,
     pub n: i32,
-    pub temperature: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f64>,
     pub frequency_penalty: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
@@ -144,7 +145,7 @@ impl Request {
                 model,
                 messages,
                 n,
-                temperature,
+                temperature: if temperature == 0.0 { None } else { Some(temperature) },
                 frequency_penalty,
                 reasoning_effort: None,
                 stream: true,
@@ -450,4 +451,92 @@ pub fn count_token(s: &str) -> anyhow::Result<usize> {
     let bpe = tiktoken_rs::cl100k_base()?;
     let tokens = bpe.encode_with_special_tokens(s);
     Ok(tokens.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_temperature_disabled_when_zero() {
+        let request = Request::new(
+            "gpt-4".to_string(),
+            vec![Message::user("test".to_string())],
+            1,
+            0.0,
+            0.0,
+        );
+
+        match request {
+            Request::Standard(req) => {
+                assert_eq!(req.temperature, None, "Temperature should be None when set to 0.0");
+            }
+            _ => panic!("Expected StandardRequest"),
+        }
+    }
+
+    #[test]
+    fn test_temperature_included_when_nonzero() {
+        let request = Request::new(
+            "gpt-4".to_string(),
+            vec![Message::user("test".to_string())],
+            1,
+            1.0,
+            0.0,
+        );
+
+        match request {
+            Request::Standard(req) => {
+                assert_eq!(req.temperature, Some(1.0), "Temperature should be Some(1.0) when set to 1.0");
+            }
+            _ => panic!("Expected StandardRequest"),
+        }
+    }
+
+    #[test]
+    fn test_o_series_models_use_oseries_request() {
+        let request = Request::new(
+            "o1".to_string(),
+            vec![Message::user("test".to_string())],
+            1,
+            1.0,
+            0.0,
+        );
+
+        match request {
+            Request::OSeries(_) => {
+                // Success - o1 should use OSeries request
+            }
+            _ => panic!("Expected OSeriesRequest for o1 model"),
+        }
+    }
+
+    #[test]
+    fn test_temperature_serialization_skipped_when_none() {
+        let request = Request::new(
+            "gpt-4".to_string(),
+            vec![Message::user("test".to_string())],
+            1,
+            0.0,
+            0.0,
+        );
+
+        let json = serde_json::to_string(&request).expect("Failed to serialize");
+        assert!(!json.contains("temperature"), "Serialized JSON should not contain 'temperature' field when it's None");
+    }
+
+    #[test]
+    fn test_temperature_serialization_included_when_some() {
+        let request = Request::new(
+            "gpt-4".to_string(),
+            vec![Message::user("test".to_string())],
+            1,
+            1.5,
+            0.0,
+        );
+
+        let json = serde_json::to_string(&request).expect("Failed to serialize");
+        assert!(json.contains("temperature"), "Serialized JSON should contain 'temperature' field when it's Some");
+        assert!(json.contains("1.5"), "Serialized JSON should contain the temperature value");
+    }
 }
