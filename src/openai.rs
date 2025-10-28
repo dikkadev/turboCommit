@@ -98,7 +98,7 @@ impl fmt::Display for Error {
 #[serde(untagged)]
 pub enum Request {
     Standard(StandardRequest),
-    OSeries(OSeriesRequest),
+    Reasoning(ReasoningRequest),
 }
 
 #[derive(Debug, Serialize)]
@@ -115,7 +115,7 @@ pub struct StandardRequest {
 }
 
 #[derive(Debug, Serialize)]
-pub struct OSeriesRequest {
+pub struct ReasoningRequest {
     pub model: String,
     pub messages: Vec<Message>,
     pub n: i32,
@@ -133,7 +133,7 @@ impl Request {
         frequency_penalty: f64,
     ) -> Self {
         if model.starts_with("o1") || model.starts_with("o3") || model.starts_with("gpt-5") {
-            Self::OSeries(OSeriesRequest {
+            Self::Reasoning(ReasoningRequest {
                 model,
                 messages,
                 n,
@@ -159,9 +159,9 @@ impl Request {
                 req.reasoning_effort = effort;
                 Self::Standard(req)
             }
-            Self::OSeries(mut req) => {
+            Self::Reasoning(mut req) => {
                 req.reasoning_effort = effort;
-                Self::OSeries(req)
+                Self::Reasoning(req)
             }
         }
     }
@@ -169,14 +169,14 @@ impl Request {
     fn model(&self) -> &str {
         match self {
             Self::Standard(req) => &req.model,
-            Self::OSeries(req) => &req.model,
+            Self::Reasoning(req) => &req.model,
         }
     }
 
     fn n(&self) -> i32 {
         match self {
             Self::Standard(req) => req.n,
-            Self::OSeries(req) => req.n,
+            Self::Reasoning(req) => req.n,
         }
     }
 
@@ -494,7 +494,7 @@ mod tests {
     }
 
     #[test]
-    fn test_o_series_models_use_oseries_request() {
+    fn test_o_series_models_use_reasoning_request() {
         let request = Request::new(
             "o1".to_string(),
             vec![Message::user("test".to_string())],
@@ -504,16 +504,16 @@ mod tests {
         );
 
         match request {
-            Request::OSeries(_) => {
-                // Success - o1 should use OSeries request
+            Request::Reasoning(_) => {
+                // Success - o1 should use Reasoning request
             }
-            _ => panic!("Expected OSeriesRequest for o1 model"),
+            _ => panic!("Expected ReasoningRequest for o1 model"),
         }
     }
 
     #[test]
-    fn test_gpt5_models_use_oseries_request() {
-        // Test all GPT-5 variants use OSeries (no temperature support)
+    fn test_gpt5_models_use_reasoning_request() {
+        // Test all GPT-5 variants use Reasoning request (no temperature support)
         let models = vec!["gpt-5", "gpt-5-nano", "gpt-5-mini", "gpt-5-codex"];
         
         for model_name in models {
@@ -526,10 +526,10 @@ mod tests {
             );
 
             match request {
-                Request::OSeries(_) => {
-                    // Success - GPT-5 models should use OSeries request
+                Request::Reasoning(_) => {
+                    // Success - GPT-5 models should use Reasoning request
                 }
-                _ => panic!("Expected OSeriesRequest for {} model", model_name),
+                _ => panic!("Expected ReasoningRequest for {} model", model_name),
             }
         }
     }
