@@ -1,9 +1,9 @@
 [package]
 name = "turbocommit"
-version = "1.6.0"
+version = "2.0.1"
 edition = "2021"
 authors = [ "dikkadev",]
-description = "A CLI tool to create commit messages with OpenAI GPT models"
+description = "A CLI tool to create commit messages with OpenAI GPT models for Git and Jujutsu (JJ) repositories"
 readme = "README.md"
 keywords = [ "chatgpt", "commit", "commit_message", "cli", "command-line",]
 repository = "https://github.com/dikkadev/turboCommit"
