@@ -4,6 +4,7 @@ use colored::Colorize;
 use crossterm::execute;
 use crossterm::style::Print;
 use inquire::Select;
+use edit;
 
 use crate::cli::Options;
 use crate::{git, jj, openai, util, debug_log::DebugLogger};

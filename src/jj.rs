@@ -6,10 +6,10 @@ use jj_lib::repo::Repo as _;
 use jj_lib::settings::UserSettings;
 use jj_lib::workspace::Workspace;
 use jj_lib::backend::TreeValue;
+use jj_lib::object_id::ObjectId;
 use futures::StreamExt;
 use pollster::FutureExt;
 use tokio::io::AsyncReadExt;
-use git2;
 
 /// Represents the VCS type being used
 #[derive(Debug, Clone, PartialEq)]
@@ -175,7 +175,7 @@ pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow
         let path_str = path.as_internal_file_string();
         
         // Only include files that are in the selected list
-        if !files.contains(&path_str) {
+        if !files.contains(&path_str.to_string()) {
             continue;
         }
         
@@ -532,7 +532,7 @@ pub fn get_jj_description(revision: Option<&str>) -> anyhow::Result<Option<Strin
     }
 }
 
-/// Sets the description for a Jujutsu revision
+/// Sets the description for a Jujutsu revision by rewriting the target commit
 pub fn set_jj_description(revision: Option<&str>, description: &str) -> anyhow::Result<()> {
     let config = StackedConfig::with_defaults();
     let user_settings = UserSettings::from_config(config)?;
@@ -540,32 +540,33 @@ pub fn set_jj_description(revision: Option<&str>, description: &str) -> anyhow::
     let working_copy_factories = jj_lib::workspace::default_working_copy_factories();
 
     let workspace = Workspace::load(&user_settings, Path::new("."), &store_factories, &working_copy_factories)?;
-    let mut repo = workspace.repo_loader().load_at_head()?;
+    let repo = workspace.repo_loader().load_at_head()?;
 
     // Resolve revision (default to @)
     let rev = revision.unwrap_or("@");
     let commit = if rev == "@" {
-        // Get the working copy commit
-        let wc_commit_id = repo.view().get_wc_commit_id(workspace.workspace_name())
+        let wc_commit_id = repo
+            .view()
+            .get_wc_commit_id(workspace.workspace_name())
             .ok_or_else(|| anyhow::anyhow!("No working copy commit found"))?;
         repo.store().get_commit(wc_commit_id)?
     } else {
-        // Resolve revision using jj's index for prefix matching
         let commit_id = resolve_revision_to_commit_id(&repo, rev)?;
         repo.store().get_commit(&commit_id)?
     };
 
-    // Create a new commit with the updated description
-    let new_commit = commit
-        .rewrite()
-        .set_description(description.to_string())
-        .write()?;
-
-    // If updating the working copy, update the repo view
-    if rev == "@" {
-        repo.record_working_copy_commit(workspace.workspace_name(), new_commit.id().clone());
+    // Start transaction and rewrite the commit with updated description
+    let mut tx = repo.start_transaction();
+    // Build and write rewritten commit
+    {
+        let mut_repo = tx.repo_mut();
+        let builder = mut_repo.rewrite_commit(&commit);
+        builder.set_description(description.to_string()).write()?;
     }
-
+    // Update descendants/refs and working copy if necessary
+    tx.repo_mut().rebase_descendants()?;
+    // Commit transaction so the change is recorded
+    tx.commit("turbocommit: set description")?;
     Ok(())
 }
 
@@ -622,12 +623,13 @@ pub fn get_jj_modified_files() -> anyhow::Result<Vec<String>> {
 
     // Compute the diff between parent and current tree
     let mut modified_files = Vec::new();
-    for entry in parent_tree.diff(&current_tree, &EverythingMatcher) {
-        let (path, _change) = entry?;
-        // Convert path to string, skip if not valid UTF-8
-        if let Some(path_str) = path.to_str() {
-            modified_files.push(path_str.to_string());
-        }
+    let diff_stream = parent_tree.diff_stream(&current_tree, &EverythingMatcher);
+    let entries: Vec<jj_lib::merged_tree::TreeDiffEntry> = diff_stream.collect::<Vec<_>>().block_on();
+    for entry in entries {
+        let path = &entry.path;
+        // Convert path to string using the internal file string representation
+        let path_str = path.as_internal_file_string();
+        modified_files.push(path_str.to_string());
     }
     Ok(modified_files)
 }
