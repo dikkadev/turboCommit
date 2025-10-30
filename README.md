@@ -4,7 +4,9 @@
 ![Crates.io](https://img.shields.io/crates/d/turbocommit)
 ![Crates.io](https://img.shields.io/crates/l/turbocommit)
 
-A powerful CLI tool that leverages OpenAI's GPT models to generate high-quality, conventional commit messages from your staged changes.
+A powerful CLI tool that leverages OpenAI's GPT models to generate high-quality, conventional commit messages from your staged changes in Git and Jujutsu (JJ) repositories.
+
+**Version 2.0 now supports both Git and Jujutsu (JJ) version control systems!**
 
 ## Features
 
@@ -35,7 +37,7 @@ alias tc='turbocommit'
 
 1. Stage your changes:
 ```bash
-git add .  # or stage specific files
+git add .  # or stage specific files (Git)
 ```
 
 2. Generate commit messages:
@@ -187,13 +189,17 @@ You can also combine this with auto-commit for a quick message update:
 turbocommit --amend --auto-commit  # Automatically amend with the first generated message
 ```
 
-### Using turboCommit with Git Hooks
+### Using turboCommit with Git Hooks and JJ
 
-If your project uses Git hooks (e.g., linters, formatters), here's how to use turboCommit effectively:
+If your project uses Git hooks (e.g., linters, formatters) or JJ workflows, here's how to use turboCommit effectively:
 
 1. Stage and commit your changes normally:
 ```bash
+# For Git repositories:
 git add .
+turbocommit
+
+# For JJ repositories:
 turbocommit
 ```
 
