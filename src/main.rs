@@ -64,6 +64,12 @@ async fn main() -> anyhow::Result<()> {
 
     // Detect VCS type
     let vcs_type = jj::detect_vcs()?;
+    
+    // Print which VCS is being used
+    match vcs_type {
+        jj::VcsType::Git => println!("{}", "Using Git repository".bright_black()),
+        jj::VcsType::Jujutsu => println!("{}", "Using Jujutsu repository".bright_black()),
+    }
 
     let mut actor = Actor::new(
         options.clone(),
