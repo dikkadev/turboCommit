@@ -99,13 +99,18 @@ fn resolve_revision_to_commit_id(repo: &std::sync::Arc<jj_lib::repo::ReadonlyRep
             let change_id_reverse_hex = change_id.reverse_hex();
             let commit_id_hex = commit_id.hex();
             
+            // Use case-insensitive comparison for better compatibility
+            let rev_lower = rev.to_lowercase();
+            let commit_id_lower = commit_id_hex.to_lowercase();
+            let change_id_lower = change_id_reverse_hex.to_lowercase();
+            
             // Check if commit ID (hex) starts with the given prefix
-            if commit_id_hex.starts_with(rev) {
+            if commit_id_lower.starts_with(&rev_lower) {
                 commit_matches.push(commit_id.clone());
             }
             // Check if change ID reverse_hex representation starts with the prefix
             // This matches jj's display format for change IDs (e.g., "yqqrnkkn")
-            else if change_id_reverse_hex.starts_with(rev) {
+            else if change_id_lower.starts_with(&rev_lower) {
                 commit_matches.push(commit_id.clone());
             }
             

@@ -66,9 +66,14 @@ pub fn decide_diff_jj(
     let mut diff_tokens = openai::count_token(&diff)?;
 
     if diff_tokens == 0 {
+        let revision_msg = if let Some(rev) = revision {
+            format!("No changes detected for revision '{}'.", rev)
+        } else {
+            "No changes detected.".to_string()
+        };
         println!(
             "{} {}",
-            "No changes detected.".red(),
+            revision_msg.red(),
             "Please make some changes before running turbocommit.".bright_black()
         );
         std::process::exit(1);
