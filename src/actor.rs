@@ -35,6 +35,15 @@ impl Actor {
     }
 
     pub fn add_message(&mut self, message: openai::Message) {
+        // Log message content if debug_context is enabled
+        if self.options.debug_context {
+            println!("\n{}", "=== Message to AI ===".blue().bold());
+            println!("{}: {}", 
+                format!("{:?}", message.role).purple().bold(),
+                message.content.bright_black()
+            );
+            println!("{}", "=====================".blue().bold());
+        }
         self.messages.push(message);
     }
 
