@@ -23,6 +23,7 @@ pub struct Options {
     pub enable_reasoning: bool,
     pub debug: bool,
     pub debug_file: Option<String>,
+    pub debug_context: bool,
     pub always_select_files: bool,
     pub config_file: Option<String>,
     pub amend: bool,
@@ -50,6 +51,7 @@ impl From<&Config> for Options {
             enable_reasoning: config.enable_reasoning,
             debug: false,
             debug_file: None,
+            debug_context: false,
             always_select_files: false,
             config_file: None,
             amend: false,
@@ -201,6 +203,9 @@ impl Options {
                         opts.print_once = true;
                     }
                 }
+                "--debug-context" => {
+                    opts.debug_context = true;
+                }
                 "--select-files" => {
                     opts.always_select_files = true;
                 }
@@ -289,6 +294,7 @@ fn help() {
     println!("  -d, --debug  Enable debug mode (prints basic request/response info)\n");
     println!("  --debug-file <path>  Write detailed debug logs to specified file (overwrites existing file)\n");
     println!("                       Use '-' to write to stdout instead of a file\n");
+    println!("  --debug-context  Log all message contents being sent to the AI\n");
     println!("  --select-files  Always prompt for file selection, regardless of token count\n");
     println!("  -c, --config <path>  Set the config file path\n");
     println!("  -r, --revision <rev>  Set the Jujutsu revision to describe (default: current working directory)\n");
