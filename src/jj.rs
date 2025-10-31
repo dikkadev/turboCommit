@@ -82,6 +82,9 @@ fn resolve_revision_to_commit_id(repo: &std::sync::Arc<jj_lib::repo::ReadonlyRep
     let mut to_visit = Vec::new();
     let mut visited = std::collections::HashSet::new();
     
+    // Normalize the revision string to lowercase once for case-insensitive matching
+    let rev_lower = rev.to_lowercase();
+    
     // Start from all visible commit heads
     for head_id in view.heads() {
         if !visited.contains(head_id) {
@@ -100,7 +103,6 @@ fn resolve_revision_to_commit_id(repo: &std::sync::Arc<jj_lib::repo::ReadonlyRep
             let commit_id_hex = commit_id.hex();
             
             // Use case-insensitive comparison for better compatibility
-            let rev_lower = rev.to_lowercase();
             let commit_id_lower = commit_id_hex.to_lowercase();
             let change_id_lower = change_id_reverse_hex.to_lowercase();
             
