@@ -172,7 +172,7 @@ pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow
     let merged_parent_tree = parent_tree;
     let matcher = EverythingMatcher;
     
-    let diff_stream = merged_tree.diff_stream(&merged_parent_tree, &matcher);
+    let diff_stream = merged_parent_tree.diff_stream(&merged_tree, &matcher);
     let mut diff_result = String::new();
     
     // Collect all diff entries and iterate through them
@@ -307,7 +307,7 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
     let merged_parent_tree = parent_tree;
     let matcher = EverythingMatcher;
     
-    let diff_stream = merged_tree.diff_stream(&merged_parent_tree, &matcher);
+    let diff_stream = merged_parent_tree.diff_stream(&merged_tree, &matcher);
     let mut diff_result = String::new();
     
     // Collect all diff entries and iterate through them
