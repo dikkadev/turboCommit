@@ -541,7 +541,23 @@ pub fn get_jj_description(revision: Option<&str>) -> anyhow::Result<Option<Strin
 
 /// Sets the description for a Jujutsu revision by rewriting the target commit
 pub fn set_jj_description(revision: Option<&str>, description: &str) -> anyhow::Result<()> {
-    let config = StackedConfig::with_defaults();
+    // Load config with defaults first, then try to load user and repo configs
+    let mut config = StackedConfig::with_defaults();
+    
+    // Try to load user config from standard locations
+    if let Ok(home_dir) = std::env::var("HOME") {
+        let user_config_path = std::path::PathBuf::from(home_dir).join(".jjconfig.toml");
+        if user_config_path.exists() {
+            let _ = config.load_file(jj_lib::config::ConfigSource::User, user_config_path);
+        }
+    }
+    
+    // Try to load repo config
+    let repo_config_path = Path::new(".jj/repo/config.toml");
+    if repo_config_path.exists() {
+        let _ = config.load_file(jj_lib::config::ConfigSource::Repo, repo_config_path);
+    }
+    
     let user_settings = UserSettings::from_config(config)?;
     let store_factories = jj_lib::repo::StoreFactories::default();
     let working_copy_factories = jj_lib::workspace::default_working_copy_factories();
