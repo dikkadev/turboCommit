@@ -193,8 +193,8 @@ pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow
         
         // Determine change type and generate appropriate diff
         match (source_value.as_resolved(), target_value.as_resolved()) {
-            // File deleted
-            (Some(Some(TreeValue::File { id: source_id, .. })), None) => {
+            // File deleted (exists in parent, absent in current)
+            (Some(Some(TreeValue::File { id: source_id, .. })), Some(None)) => {
                 diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
                 diff_result.push_str(&format!("deleted file mode 100644\n"));
                 diff_result.push_str(&format!("--- a/{}\n", path_str));
@@ -204,8 +204,8 @@ pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow
                 diff_result.push_str(&format_deletion(&content));
             }
             
-            // File added
-            (None, Some(Some(TreeValue::File { id: target_id, .. }))) => {
+            // File added (absent in parent, exists in current)
+            (Some(None), Some(Some(TreeValue::File { id: target_id, .. }))) => {
                 diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
                 diff_result.push_str(&format!("new file mode 100644\n"));
                 diff_result.push_str(&format!("--- /dev/null\n"));
@@ -323,8 +323,8 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
         
         // Determine change type and generate appropriate diff
         match (source_value.as_resolved(), target_value.as_resolved()) {
-            // File deleted
-            (Some(Some(TreeValue::File { id: source_id, .. })), None) => {
+            // File deleted (exists in parent, absent in current)
+            (Some(Some(TreeValue::File { id: source_id, .. })), Some(None)) => {
                 diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
                 diff_result.push_str(&format!("deleted file mode 100644\n"));
                 diff_result.push_str(&format!("--- a/{}\n", path_str));
@@ -334,8 +334,8 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
                 diff_result.push_str(&format_deletion(&content));
             }
             
-            // File added
-            (None, Some(Some(TreeValue::File { id: target_id, .. }))) => {
+            // File added (absent in parent, exists in current)
+            (Some(None), Some(Some(TreeValue::File { id: target_id, .. }))) => {
                 diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
                 diff_result.push_str(&format!("new file mode 100644\n"));
                 diff_result.push_str(&format!("--- /dev/null\n"));
