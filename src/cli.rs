@@ -176,7 +176,7 @@ impl Options {
                         opts.api_key = Some(key);
                     }
                 }
-                "--reasoning-effort" => {
+                "-e" | "--reasoning-effort" => {
                     if let Some(effort) = iter.next() {
                         // Support 'none' to disable reasoning, plus low/medium/high
                         if !["none", "low", "medium", "high"].contains(&effort.as_str()) {
@@ -195,7 +195,7 @@ impl Options {
                         opts.reasoning_effort = Some("medium".to_string());
                     }
                 }
-                "--verbosity" => {
+                "-v" | "--verbosity" => {
                     if let Some(level) = iter.next() {
                         if !["low", "medium", "high"].contains(&level.as_str()) {
                             println!(
@@ -238,7 +238,7 @@ impl Options {
                     opts.jj_rewrite = !opts.jj_rewrite;
                 }
                 "-h" | "--help" => help(),
-                "-v" | "--version" => {
+                "--version" => {
                     println!("turbocommit version {}", env!("CARGO_PKG_VERSION").purple());
                     process::exit(0);
                 }
@@ -303,10 +303,10 @@ fn help() {
     println!("  --disable-auto-update-check  Disable automatic update checks\n");
     println!("  --api-key <key>  Set the API key\n");
     println!("  --reason, --enable-reasoning  Enable reasoning mode (enabled by default for GPT-5.1)\n");
-    println!("  --reasoning-effort <effort>  Set the reasoning effort level\n");
+    println!("  -e, --reasoning-effort <effort>  Set the reasoning effort level\n");
     println!("                              Values: none, low, medium, high (default: medium)\n");
     println!("                              Use 'none' to disable reasoning features\n");
-    println!("  --verbosity <level>  Set output verbosity level\n");
+    println!("  -v, --verbosity <level>  Set output verbosity level\n");
     println!("                      Values: low, medium, high\n");
     println!("  -d, --debug  Enable debug mode (prints basic request/response info)\n");
     println!("  --debug-file <path>  Write detailed debug logs to specified file (overwrites existing file)\n");
@@ -513,6 +513,26 @@ mod tests {
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
         assert_eq!(options.verbosity, Some("high".to_string()));
+    }
+
+    #[test]
+    fn test_short_options_for_reasoning_and_verbosity() {
+        let config = Config::default();
+        let args = vec![
+            "turbocommit",
+            "-e",
+            "high",
+            "-v",
+            "low",
+            "--model",
+            "gpt-5.1",
+        ];
+        let args = args.into_iter().map(String::from).collect::<Vec<String>>();
+        let options = Options::new(args.into_iter(), &config);
+
+        assert_eq!(options.reasoning_effort, Some("high".to_string()));
+        assert_eq!(options.verbosity, Some("low".to_string()));
+        assert_eq!(options.model.0, "gpt-5.1");
     }
 
     #[test]
