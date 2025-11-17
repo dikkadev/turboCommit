@@ -4,14 +4,14 @@
 ![Crates.io](https://img.shields.io/crates/d/turbocommit)
 ![Crates.io](https://img.shields.io/crates/l/turbocommit)
 
-A powerful CLI tool that leverages OpenAI's GPT-5.x models to generate high-quality, conventional commit messages from your staged changes in Git and Jujutsu (JJ) repositories.
+A powerful CLI tool that leverages OpenAI's GPT-5.1 models to generate high-quality, conventional commit messages from your staged changes in Git and Jujutsu (JJ) repositories.
 
 **Version 2.0 now supports both Git and Jujutsu (JJ) version control systems!**
-**Latest update: Exclusively uses GPT-5.x models with enhanced reasoning and verbosity controls!**
+**Latest update: Exclusively uses GPT-5.1 models with enhanced reasoning and verbosity controls!**
 
 ## Features
 
-- 🤖 **GPT-5.x Powered** - Exclusively uses the latest GPT-5 model family (gpt-5, gpt-5-nano, gpt-5-mini, gpt-5-codex)
+- 🤖 **GPT-5.1 Powered** - Exclusively uses the latest GPT-5.1 model family (gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-mini)
 - 📝 Generates conventional commit messages that follow best practices
 - 🎯 Interactive selection from multiple commit message suggestions
 - ✏️ Edit messages directly or request AI revisions
@@ -55,12 +55,12 @@ After generating commit messages, you can:
 
 ### Options
 
-**Important: turboCommit now only supports GPT-5.x models (e.g., gpt-5, gpt-5-nano, gpt-5-mini, gpt-5-codex)**
+**Important: turboCommit now only supports GPT-5.1 models (gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-mini)**
 
 - `-n <number>` - Number of commit message suggestions to generate (default: 3)
-- `-m <model>` - Specify the GPT-5.x model to use (must start with 'gpt-5')
-  - Examples: `gpt-5`, `gpt-5-nano`, `gpt-5-mini`, `gpt-5-codex`
-- `-r, --enable-reasoning` - Enable reasoning mode (enabled by default for GPT-5.x)
+- `-m <model>` - Specify the GPT-5.1 model to use
+  - Supported: `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`
+- `-r, --enable-reasoning` - Enable reasoning mode (enabled by default for GPT-5.1)
 - `--reasoning-effort <level>` - Set reasoning effort level
   - Options: `none` (disable reasoning), `low`, `medium` (default), `high`
 - `--verbosity <level>` - Control output verbosity
@@ -73,25 +73,25 @@ After generating commit messages, you can:
 - `--api-endpoint <url>` - Custom API endpoint URL
 - `-p, --print-once` - Disable streaming output
 
-**Note:** Temperature (`-t`) and frequency penalty (`-f`) are legacy parameters and have no effect with GPT-5.x models, which use reasoning mode by default.
+**Note:** Temperature (`-t`) and frequency penalty (`-f`) are legacy parameters and have no effect with GPT-5.1 models, which use reasoning mode by default.
 
 #### Reasoning Mode
-GPT-5.x models have built-in reasoning capabilities that are enabled by default. These models are specifically designed to analyze code changes and generate commit messages with advanced reasoning.
+GPT-5.1 models have built-in reasoning capabilities that are enabled by default. These models are specifically designed to analyze code changes and generate commit messages with advanced reasoning.
 
 You can control the reasoning effort level:
 ```bash
-turbocommit -m gpt-5-mini                              # Default reasoning (medium)
-turbocommit --reasoning-effort high -m gpt-5           # High reasoning effort
-turbocommit --reasoning-effort low -m gpt-5-nano       # Low reasoning effort
-turbocommit --reasoning-effort none -m gpt-5-mini      # Disable reasoning features
+turbocommit -m gpt-5.1                                  # Default reasoning (medium)
+turbocommit --reasoning-effort high -m gpt-5.1          # High reasoning effort
+turbocommit --reasoning-effort low -m gpt-5.1-codex     # Low reasoning effort
+turbocommit --reasoning-effort none -m gpt-5.1          # Disable reasoning features
 ```
 
 #### Verbosity Control
 Control the level of detail in the model's responses:
 ```bash
-turbocommit --verbosity low -m gpt-5-mini              # Concise output
-turbocommit --verbosity medium -m gpt-5                # Balanced output (default)
-turbocommit --verbosity high -m gpt-5                  # Detailed output
+turbocommit --verbosity low -m gpt-5.1-codex-mini       # Concise output
+turbocommit --verbosity medium -m gpt-5.1               # Balanced output (default)
+turbocommit --verbosity high -m gpt-5.1-codex           # Detailed output
 ```
 
 #### Debugging
@@ -117,7 +117,7 @@ turbocommit --help
 
 turboCommit creates a config file at `~/.turbocommit.yaml` on first run. You can customize:
 
-- Default GPT-5.x model
+- Default GPT-5.1 model
 - API endpoint
 - Reasoning effort level
 - Verbosity setting
@@ -129,7 +129,7 @@ turboCommit creates a config file at `~/.turbocommit.yaml` on first run. You can
 
 Example configuration:
 ```yaml
-model: "gpt-5-mini"  # Must be a GPT-5.x model
+model: "gpt-5.1"  # Must be a GPT-5.1 model: gpt-5.1, gpt-5.1-codex, or gpt-5.1-codex-mini
 default_number_of_choices: 3
 enable_reasoning: true
 reasoning_effort: "medium"  # Options: none, low, medium, high
@@ -140,7 +140,7 @@ api_endpoint: "https://api.openai.com/v1/chat/completions"
 api_key_env_var: "OPENAI_API_KEY"
 ```
 
-**Note:** The `default_temperature` and `default_frequency_penalty` settings are legacy parameters and are ignored by GPT-5.x models.
+**Note:** The `default_temperature` and `default_frequency_penalty` settings are legacy parameters and are ignored by GPT-5.1 models.
 
 ### Multiple Config Files
 
