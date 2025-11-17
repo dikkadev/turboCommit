@@ -514,7 +514,7 @@ mod tests {
     #[test]
     fn test_gpt5_models_use_reasoning_request() {
         // Test all GPT-5 variants use Reasoning request (no temperature support)
-        let models = vec!["gpt-5", "gpt-5-nano", "gpt-5-mini", "gpt-5-codex"];
+        let models = vec!["gpt-5", "gpt-5-nano", "gpt-5-mini", "gpt-5-codex", "gpt-5.1", "gpt-5.1-codex"];
         
         for model_name in models {
             let request = Request::new(
