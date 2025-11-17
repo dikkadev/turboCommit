@@ -31,9 +31,9 @@ pub struct Config {
     #[serde(default)]
     pub disable_auto_update_check: bool,
     #[serde(default)]
-    pub enable_reasoning: bool,
+    pub reasoning_effort: String,
     #[serde(default)]
-    pub verbosity: Option<String>,
+    pub verbosity: String,
     #[serde(default)]
     pub jj_rewrite_default: bool,
     #[serde(default)]
@@ -49,8 +49,8 @@ impl Default for Config {
             default_number_of_choices: 3,
             disable_print_as_stream: false,
             disable_auto_update_check: false,
-            enable_reasoning: false,
-            verbosity: None,
+            reasoning_effort: String::from("low"),
+            verbosity: String::from("medium"),
             jj_rewrite_default: false, // Default to overwrite mode
             system_msg: String::from("You are a specialized AI that generates conventional commit messages based on git diffs. Your ONLY purpose is to produce properly formatted conventional commits that follow the exact specification at conventionalcommits.org.
 
@@ -67,6 +67,7 @@ impl Default for Config {
 - A good commit explains the intent, motivation, and reasoning behind the change
 - Commits should provide context that isn't obvious from the code itself
 - Think at a higher abstraction level than the code - capture the purpose, not the implementation
+- Most commits should be title only if they are small. Large changes may warrant a body, but only include a body when absolutely necessary to explain the WHY behind the change or when requested by the user. Always prioritize clarity and precision over verbosity.
 
 # CONVENTIONAL COMMIT STRUCTURE
 <type>[optional scope][!]: <description>

@@ -48,19 +48,20 @@ impl Actor {
     }
 
     async fn ask(&mut self) -> anyhow::Result<Vec<String>> {
-        let n = if self.options.enable_reasoning { 1 } else { self.options.n };
+        // Always use n=1 for now as GPT-5.1 works best with single generations
+        let n = 1;
         let mut request = openai::Request::new(
             self.options.model.clone().to_string(),
             self.messages.clone(),
             n,
         );
 
-        // Add reasoning effort if reasoning mode is enabled
-        if self.options.enable_reasoning {
-            request = request.with_reasoning_effort(self.options.reasoning_effort.clone());
+        // Add reasoning effort (default from config or CLI override)
+        if let Some(ref effort) = self.options.reasoning_effort {
+            request = request.with_reasoning_effort(Some(effort.clone()));
         }
 
-        // Add verbosity if specified
+        // Add verbosity (default from config or CLI override)
         if let Some(ref verbosity) = self.options.verbosity {
             request = request.with_verbosity(Some(verbosity.clone()));
         }
@@ -71,28 +72,29 @@ impl Actor {
 
         // Log basic info about the request
         let info = format!(
-            "model={}, reasoning={}, effort={}, verbosity={}, messages={}, tokens={}",
+            "model={}, effort={}, verbosity={}, messages={}, tokens={}",
             self.options.model.0,
-            self.options.enable_reasoning,
-            self.options.reasoning_effort.as_deref().unwrap_or("none"),
+            self.options.reasoning_effort.as_deref().unwrap_or("default"),
             self.options.verbosity.as_deref().unwrap_or("default"),
             self.messages.len(),
             self.used_tokens
         );
         self.debug_logger.log_info(&info);
 
-        // Only show minimal info in regular debug mode
+        // Show useful info in debug mode
         if self.options.debug && self.options.debug_file.is_none() {
-            println!("\n{}", "Request Info:".blue().bold());
-            println!("  Model: {}", self.options.model.0.purple());
-            if self.options.enable_reasoning {
-                println!("  Reasoning: {} ({})", 
-                    "enabled".purple(),
-                    self.options.reasoning_effort.as_deref().unwrap_or("medium").purple()
-                );
-            }
-            println!("  Messages: {}", self.messages.len().to_string().purple());
-            println!("  Tokens (input): {}", self.used_tokens.to_string().purple());
+            println!("\n{}", "=== Request Info ===".blue().bold());
+            println!("  {}: {}", "Model".bright_black(), self.options.model.0.purple());
+            println!("  {}: {}", 
+                "Reasoning Effort".bright_black(),
+                self.options.reasoning_effort.as_deref().unwrap_or("default").purple()
+            );
+            println!("  {}: {}", 
+                "Verbosity".bright_black(),
+                self.options.verbosity.as_deref().unwrap_or("default").purple()
+            );
+            println!("  {}: {}", "Messages".bright_black(), self.messages.len().to_string().purple());
+            println!("  {}: {}", "Input Tokens".bright_black(), self.used_tokens.to_string().purple());
         }
 
         match request

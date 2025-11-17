@@ -18,7 +18,6 @@ pub struct Options {
     pub disable_auto_update_check: bool,
     pub api_key: Option<String>,
     pub reasoning_effort: Option<String>,
-    pub enable_reasoning: bool,
     pub verbosity: Option<String>,
     pub debug: bool,
     pub debug_file: Option<String>,
@@ -44,9 +43,8 @@ impl From<&Config> for Options {
             system_msg: None,
             disable_auto_update_check: config.disable_auto_update_check,
             api_key: None,
-            reasoning_effort: None,
-            enable_reasoning: config.enable_reasoning,
-            verbosity: config.verbosity.clone(),
+            reasoning_effort: Some(config.reasoning_effort.clone()),
+            verbosity: Some(config.verbosity.clone()),
             debug: false,
             debug_file: None,
             debug_context: false,
@@ -155,12 +153,6 @@ impl Options {
                         opts.reasoning_effort = Some(effort);
                     }
                 }
-                "--reason" | "--enable-reasoning" => {
-                    opts.enable_reasoning = true;
-                    if opts.reasoning_effort.is_none() {
-                        opts.reasoning_effort = Some("low".to_string());
-                    }
-                }
                 "-v" | "--verbosity" => {
                     if let Some(level) = iter.next() {
                         if !["low", "medium", "high"].contains(&level.as_str()) {
@@ -260,13 +252,12 @@ fn help() {
     println!("  --system-msg-file <path>  Load system message from a file\n");
     println!("  --disable-auto-update-check  Disable automatic update checks\n");
     println!("  --api-key <key>  Set the API key\n");
-    println!("  --reason, --enable-reasoning  Enable reasoning mode (enabled by default for GPT-5.1)\n");
     println!("  -e, --reasoning-effort <effort>  Set the reasoning effort level\n");
-    println!("                              Values: none, low, medium, high (default: low)\n");
+    println!("                              Values: none, low (default), medium, high\n");
     println!("                              Use 'none' to disable reasoning features\n");
-    println!("  -v, --verbosity <level>  Set output verbosity level\n");
+    println!("  -v, --verbosity <level>  Set output verbosity level (default: medium)\n");
     println!("                      Values: low, medium, high\n");
-    println!("  -d, --debug  Enable debug mode (prints basic request/response info)\n");
+    println!("  -d, --debug  Enable debug mode (shows request/response info and token usage)\n");
     println!("  --debug-file <path>  Write detailed debug logs to specified file (overwrites existing file)\n");
     println!("                       Use '-' to write to stdout instead of a file\n");
     println!("  --debug-context  Log all message contents being sent to the AI\n");
@@ -305,9 +296,8 @@ mod tests {
         assert_eq!(options.n, config.default_number_of_choices);
         assert_eq!(options.print_once, config.disable_print_as_stream);
         assert_eq!(options.model, config.model);
-        assert_eq!(options.enable_reasoning, config.enable_reasoning);
-        assert_eq!(options.reasoning_effort, None);
-        assert_eq!(options.verbosity, config.verbosity);
+        assert_eq!(options.reasoning_effort, Some(config.reasoning_effort));
+        assert_eq!(options.verbosity, Some(config.verbosity));
     }
 
     #[test]
@@ -320,7 +310,6 @@ mod tests {
             "--print-once",
             "--model",
             "gpt-5.1",
-            "--enable-reasoning",
             "--reasoning-effort",
             "medium",
             "--verbosity",
@@ -334,7 +323,6 @@ mod tests {
         assert_eq!(options.n, 3);
         assert_eq!(options.print_once, true);
         assert_eq!(options.model.0, "gpt-5.1");
-        assert_eq!(options.enable_reasoning, true);
         assert_eq!(options.reasoning_effort, Some("medium".to_string()));
         assert_eq!(options.verbosity, Some("high".to_string()));
         assert_eq!(options.msg, "User Explanation/Instruction: 'test commit'");
@@ -345,14 +333,12 @@ mod tests {
         let config = Config::default();
         let args = vec![
             "turbocommit",
-            "--enable-reasoning",
             "--reasoning-effort",
             "very-high",
         ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
-        assert_eq!(options.enable_reasoning, true);
         assert_eq!(options.reasoning_effort, Some("very-high".to_string()));
     }
 
@@ -362,7 +348,6 @@ mod tests {
         let args = vec![
             "turbocommit",
             "-d",
-            "--reason",
             "--model",
             "gpt-5.1-codex-mini",
         ];
@@ -371,8 +356,6 @@ mod tests {
 
         assert!(options.debug);
         assert!(options.print_once); // Debug mode forces print_once
-        assert!(options.enable_reasoning);
-        assert_eq!(options.reasoning_effort, Some("low".to_string())); // Default effort
         assert_eq!(options.model.0, "gpt-5.1-codex-mini");
     }
 

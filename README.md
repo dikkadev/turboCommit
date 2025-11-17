@@ -60,12 +60,11 @@ After generating commit messages, you can:
 - `-n <number>` - Number of commit message suggestions to generate (default: 3)
 - `-m <model>` - Specify the GPT-5.1 model to use
   - Supported: `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`
-- `-r, --enable-reasoning` - Enable reasoning mode (enabled by default for GPT-5.1)
-- `-e, --reasoning-effort <level>` - Set reasoning effort level
-  - Options: `none` (disable reasoning), `low` (default), `medium`, `high`
-- `-v, --verbosity <level>` - Control output verbosity
+- `-e, --reasoning-effort <level>` - Set reasoning effort level (default: low)
+  - Options: `none` (disable reasoning), `low`, `medium`, `high`
+- `-v, --verbosity <level>` - Control output verbosity (default: medium)
   - Options: `low`, `medium`, `high`
-- `-d, --debug` - Show basic debug info in console
+- `-d, --debug` - Show request/response info and token usage
 - `--debug-file <path>` - Write detailed debug logs to file (use '-' for stdout)
 - `--auto-commit` - Automatically commit with the generated message
 - `--amend` - Amend the last commit with the generated message
@@ -74,7 +73,7 @@ After generating commit messages, you can:
 - `-p, --print-once` - Disable streaming output
 
 #### Reasoning Mode
-GPT-5.1 models have built-in reasoning capabilities that are enabled by default. These models are specifically designed to analyze code changes and generate commit messages with advanced reasoning.
+GPT-5.1 models have built-in reasoning capabilities. You can control the reasoning effort level which affects the depth of analysis:
 
 You can control the reasoning effort level:
 ```bash
@@ -129,7 +128,7 @@ Example configuration:
 ```yaml
 model: "gpt-5.1"  # Must be a GPT-5.1 model: gpt-5.1, gpt-5.1-codex, or gpt-5.1-codex-mini
 default_number_of_choices: 3
-enable_reasoning: true
+reasoning_effort: "low"  # Options: none, low, medium, high
 verbosity: "medium"  # Options: low, medium, high
 disable_print_as_stream: false
 disable_auto_update_check: false
