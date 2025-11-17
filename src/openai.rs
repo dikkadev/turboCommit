@@ -136,8 +136,8 @@ impl Request {
         temperature: f64,
         frequency_penalty: f64,
     ) -> Self {
-        // GPT-5.x models use ReasoningRequest (no temperature/frequency support)
-        if model.starts_with("gpt-5") {
+        // GPT-5.1 models use ReasoningRequest (no temperature/frequency support)
+        if model.starts_with("gpt-5.1") {
             Self::Reasoning(ReasoningRequest {
                 model,
                 messages,
@@ -479,30 +479,29 @@ mod tests {
 
     #[test]
     fn test_temperature_disabled_when_zero() {
-        // Note: GPT-5 models don't support temperature, so using a hypothetical non-gpt-5 model
-        // Since we only support GPT-5, this test demonstrates the legacy behavior
+        // GPT-5.1 models use ReasoningRequest which doesn't support temperature
         let request = Request::new(
-            "gpt-5".to_string(),
+            "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
             0.0,
             0.0,
         );
 
-        // GPT-5 models use ReasoningRequest which doesn't have temperature
+        // GPT-5.1 models use ReasoningRequest which doesn't have temperature
         match request {
             Request::Reasoning(_) => {
-                // Success - GPT-5 models use reasoning request
+                // Success - GPT-5.1 models use reasoning request
             }
-            _ => panic!("Expected ReasoningRequest for GPT-5 model"),
+            _ => panic!("Expected ReasoningRequest for GPT-5.1 model"),
         }
     }
 
     #[test]
     fn test_temperature_included_when_nonzero() {
-        // GPT-5 models don't support temperature parameter
+        // GPT-5.1 models don't support temperature parameter
         let request = Request::new(
-            "gpt-5".to_string(),
+            "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
             1.0,
@@ -511,16 +510,16 @@ mod tests {
 
         match request {
             Request::Reasoning(_) => {
-                // Success - GPT-5 models use reasoning request (no temperature)
+                // Success - GPT-5.1 models use reasoning request (no temperature)
             }
-            _ => panic!("Expected ReasoningRequest for GPT-5 model"),
+            _ => panic!("Expected ReasoningRequest for GPT-5.1 model"),
         }
     }
 
     #[test]
-    fn test_gpt5_models_use_reasoning_request() {
-        // Test all GPT-5 variants use Reasoning request (no temperature support)
-        let models = vec!["gpt-5", "gpt-5-nano", "gpt-5-mini", "gpt-5-codex"];
+    fn test_gpt51_models_use_reasoning_request() {
+        // Test all GPT-5.1 variants use Reasoning request (no temperature support)
+        let models = vec!["gpt-5.1", "gpt-5.1-codex", "gpt-5.1-codex-mini"];
         
         for model_name in models {
             let request = Request::new(
@@ -533,7 +532,7 @@ mod tests {
 
             match request {
                 Request::Reasoning(_) => {
-                    // Success - GPT-5 models should use Reasoning request
+                    // Success - GPT-5.1 models should use Reasoning request
                 }
                 _ => panic!("Expected ReasoningRequest for {} model", model_name),
             }
@@ -543,7 +542,7 @@ mod tests {
     #[test]
     fn test_verbosity_with_request() {
         let request = Request::new(
-            "gpt-5".to_string(),
+            "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
             1.0,
@@ -561,7 +560,7 @@ mod tests {
     #[test]
     fn test_reasoning_effort_none() {
         let request = Request::new(
-            "gpt-5".to_string(),
+            "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
             1.0,
@@ -579,7 +578,7 @@ mod tests {
     #[test]
     fn test_verbosity_serialization_skipped_when_none() {
         let request = Request::new(
-            "gpt-5".to_string(),
+            "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
             0.0,
@@ -593,7 +592,7 @@ mod tests {
     #[test]
     fn test_verbosity_serialization_included_when_some() {
         let request = Request::new(
-            "gpt-5".to_string(),
+            "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
             1.5,

@@ -47,7 +47,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            model: model::Model("gpt-5-mini".to_string()),
+            model: model::Model("gpt-5.1".to_string()),
             api_endpoint: String::from("https://api.openai.com/v1/chat/completions"),
             api_key_env_var: String::from("OPENAI_API_KEY"),
             default_temperature: 1.05,

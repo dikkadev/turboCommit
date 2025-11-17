@@ -280,20 +280,20 @@ fn help() {
     println!("{}", " \\___/\\____/_/ /_/ /_/_/ /_/ /_/_/\\__/".green());
 
     println!("\nUsage: turbocommit [options] [message]\n");
-    println!("{}", "NOTE: turboCommit now exclusively uses GPT-5.x models".yellow().bold());
-    println!("{}\n", "Only gpt-5, gpt-5-nano, gpt-5-mini, gpt-5-codex and other gpt-5 variants are supported".bright_black());
+    println!("{}", "NOTE: turboCommit now exclusively uses GPT-5.1 models".yellow().bold());
+    println!("{}\n", "Only gpt-5.1, gpt-5.1-codex, and gpt-5.1-codex-mini are supported".bright_black());
     println!("Options:");
     println!("  -n <n>   Number of choices to generate (default: 3)\n");
-    println!("  -m <m>   Model to use (must be a GPT-5.x model)\n  --model <m>");
-    println!("           Examples: gpt-5, gpt-5-nano, gpt-5-mini, gpt-5-codex\n");
+    println!("  -m <m>   Model to use (must be a GPT-5.1 model)\n  --model <m>");
+    println!("           Examples: gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-mini\n");
     println!("  -p       Will not print tokens as they are generated.\n  --print-once \n");
     println!(
-        "  -t <t>   Temperature (|t| 0.0 < t < 2.0) - Legacy parameter, ignored for GPT-5.x models\n{}\n",
-        "(GPT-5.x models use reasoning mode by default)"
+        "  -t <t>   Temperature (|t| 0.0 < t < 2.0) - Legacy parameter, ignored for GPT-5.1 models\n{}\n",
+        "(GPT-5.1 models use reasoning mode by default)"
             .bright_black()
     );
     println!(
-        "  -f <f>   Frequency penalty (|f| -2.0 < f < 2.0) - Legacy parameter, ignored for GPT-5.x models\n"
+        "  -f <f>   Frequency penalty (|f| -2.0 < f < 2.0) - Legacy parameter, ignored for GPT-5.1 models\n"
     );
     println!("  -a, --auto-commit  Automatically generate and commit a single message\n");
     println!("  --amend  Amend the last commit with the generated message\n");
@@ -302,7 +302,7 @@ fn help() {
     println!("  --system-msg-file <path>  Load system message from a file\n");
     println!("  --disable-auto-update-check  Disable automatic update checks\n");
     println!("  --api-key <key>  Set the API key\n");
-    println!("  --reason, --enable-reasoning  Enable reasoning mode (enabled by default for GPT-5.x)\n");
+    println!("  --reason, --enable-reasoning  Enable reasoning mode (enabled by default for GPT-5.1)\n");
     println!("  --reasoning-effort <effort>  Set the reasoning effort level\n");
     println!("                              Values: none, low, medium, high (default: medium)\n");
     println!("                              Use 'none' to disable reasoning features\n");
@@ -367,7 +367,7 @@ mod tests {
             "0.5",
             "--print-once",
             "--model",
-            "gpt-5",
+            "gpt-5.1",
             "--enable-reasoning",
             "--reasoning-effort",
             "medium",
@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(options.t, 1.0);
         assert_eq!(options.f, 0.5);
         assert_eq!(options.print_once, true);
-        assert_eq!(options.model.0, "gpt-5");
+        assert_eq!(options.model.0, "gpt-5.1");
         assert_eq!(options.enable_reasoning, true);
         assert_eq!(options.reasoning_effort, Some("medium".to_string()));
         assert_eq!(options.verbosity, Some("high".to_string()));
@@ -414,7 +414,7 @@ mod tests {
             "-d",
             "--reason",
             "--model",
-            "gpt-5-mini",
+            "gpt-5.1-codex-mini",
         ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
@@ -423,7 +423,7 @@ mod tests {
         assert!(options.print_once); // Debug mode forces print_once
         assert!(options.enable_reasoning);
         assert_eq!(options.reasoning_effort, Some("medium".to_string())); // Default effort
-        assert_eq!(options.model.0, "gpt-5-mini");
+        assert_eq!(options.model.0, "gpt-5.1-codex-mini");
     }
 
     #[test]
@@ -477,13 +477,13 @@ mod tests {
             "--reasoning-effort",
             "none",
             "--model",
-            "gpt-5",
+            "gpt-5.1",
         ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
         assert_eq!(options.reasoning_effort, Some("none".to_string()));
-        assert_eq!(options.model.0, "gpt-5");
+        assert_eq!(options.model.0, "gpt-5.1");
     }
 
     #[test]
@@ -496,7 +496,7 @@ mod tests {
             "--verbosity",
             "low",
             "--model",
-            "gpt-5-nano",
+            "gpt-5.1-codex-mini",
         ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
@@ -508,7 +508,7 @@ mod tests {
             "--verbosity",
             "high",
             "--model",
-            "gpt-5",
+            "gpt-5.1-codex",
         ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
