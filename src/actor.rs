@@ -125,10 +125,23 @@ impl Actor {
     }
 
     pub async fn start(&mut self) -> anyhow::Result<()> {
+        if self.options.debug {
+            println!("\n{}", "=== Starting Commit Generation ===".blue().bold());
+        }
+        
         let first_choices = self.ask().await?;
+        
+        if self.options.debug {
+            println!("\n{}", "=== Received Response ===".blue().bold());
+            println!("  Generated {} choice(s)", first_choices.len());
+        }
+        
         let mut message = match util::choose_message(first_choices) {
             Some(message) => message,
             None => {
+                if self.options.debug {
+                    println!("{}", "User cancelled message selection".yellow());
+                }
                 return Ok(());
             }
         };
@@ -144,6 +157,9 @@ impl Actor {
 
             match Task::from_str(task) {
                 Task::Commit => {
+                    if self.options.debug {
+                        println!("\n{}", "=== Committing ===".blue().bold());
+                    }
                     match self.vcs_type {
                         jj::VcsType::Git => {
                             match git::commit(message, self.options.amend) {
@@ -169,6 +185,9 @@ impl Actor {
                     break;
                 }
                 Task::Edit => {
+                    if self.options.debug {
+                        println!("\n{}", "=== Opening Editor ===".blue().bold());
+                    }
                     message = edit::edit(message)?;
                     execute!(
                         std::io::stdout(),
@@ -181,20 +200,37 @@ impl Actor {
                     )?;
                 }
                 Task::Revise => {
+                    if self.options.debug {
+                        println!("\n{}", "=== Revising Message ===".blue().bold());
+                    }
                     self.add_message(openai::Message::assistant(message.clone()));
                     let input = inquire::Text::new("Revise:").prompt()?;
+                    if self.options.debug {
+                        println!("  User input: {}", input.bright_black());
+                    }
                     self.add_message(openai::Message::user(input));
 
                     let choices = self.ask().await?;
+                    
+                    if self.options.debug {
+                        println!("\n{}", "=== Received Revised Response ===".blue().bold());
+                        println!("  Generated {} choice(s)", choices.len());
+                    }
 
                     message = match util::choose_message(choices) {
                         Some(message) => message,
                         None => {
+                            if self.options.debug {
+                                println!("{}", "User cancelled message selection".yellow());
+                            }
                             return Ok(());
                         }
                     };
                 }
                 Task::Abort => {
+                    if self.options.debug {
+                        println!("\n{}", "=== Aborted ===".yellow().bold());
+                    }
                     break;
                 }
             }

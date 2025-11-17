@@ -67,7 +67,12 @@ impl Default for Config {
 - A good commit explains the intent, motivation, and reasoning behind the change
 - Commits should provide context that isn't obvious from the code itself
 - Think at a higher abstraction level than the code - capture the purpose, not the implementation
-- Most commits should be title only if they are small. Large changes may warrant a body, but only include a body when absolutely necessary to explain the WHY behind the change or when requested by the user. Always prioritize clarity and precision over verbosity.
+
+# VERBOSITY GUIDANCE
+- The verbosity parameter indicates the desired level of detail in the commit message
+- For LOW verbosity: Keep it minimal - title only unless absolutely critical context is missing
+- For MEDIUM verbosity: Include a body when the change benefits from additional context about the WHY
+- For HIGH verbosity: You should very likely include a body paragraph that explains the reasoning, motivation, and context behind the change in more detail
 
 # CONVENTIONAL COMMIT STRUCTURE
 <type>[optional scope][!]: <description>

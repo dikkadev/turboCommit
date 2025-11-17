@@ -364,12 +364,19 @@ impl Request {
         }
 
         if no_animations || debug {
+            if debug {
+                println!("\n{}", "=== API Response ===".blue().bold());
+            }
             println!(
                 "Tokens: {} in, {} out (total: {})",
                 crate::util::format_token_count(prompt_tokens).purple(),
                 crate::util::format_token_count(response_tokens).purple(),
                 crate::util::format_token_count(prompt_tokens + response_tokens).purple(),
             );
+            if debug {
+                println!("  Response time: {}ms", "~".to_string().bright_black());
+                println!("  Choices generated: {}", choices.len().to_string().purple());
+            }
             for (i, choice) in choices.iter().enumerate() {
                 println!(
                     "[{}] {}\n{}\n",
