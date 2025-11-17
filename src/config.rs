@@ -37,6 +37,8 @@ pub struct Config {
     #[serde(default)]
     pub enable_reasoning: bool,
     #[serde(default)]
+    pub verbosity: Option<String>,
+    #[serde(default)]
     pub jj_rewrite_default: bool,
     #[serde(default)]
     pub system_msg: String,
@@ -45,7 +47,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            model: model::Model("gpt-4o-mini".to_string()),
+            model: model::Model("gpt-5-mini".to_string()),
             api_endpoint: String::from("https://api.openai.com/v1/chat/completions"),
             api_key_env_var: String::from("OPENAI_API_KEY"),
             default_temperature: 1.05,
@@ -54,6 +56,7 @@ impl Default for Config {
             disable_print_as_stream: false,
             disable_auto_update_check: false,
             enable_reasoning: false,
+            verbosity: None,
             jj_rewrite_default: false, // Default to overwrite mode
             system_msg: String::from("You are a specialized AI that generates conventional commit messages based on git diffs. Your ONLY purpose is to produce properly formatted conventional commits that follow the exact specification at conventionalcommits.org.
 

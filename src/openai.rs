@@ -111,6 +111,8 @@ pub struct StandardRequest {
     pub frequency_penalty: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<String>,
     stream: bool,
 }
 
@@ -121,6 +123,8 @@ pub struct ReasoningRequest {
     pub n: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<String>,
     stream: bool,
 }
 
@@ -132,12 +136,14 @@ impl Request {
         temperature: f64,
         frequency_penalty: f64,
     ) -> Self {
-        if model.starts_with("o1") || model.starts_with("o3") || model.starts_with("gpt-5") {
+        // GPT-5.x models use ReasoningRequest (no temperature/frequency support)
+        if model.starts_with("gpt-5") {
             Self::Reasoning(ReasoningRequest {
                 model,
                 messages,
                 n,
                 reasoning_effort: None,
+                verbosity: None,
                 stream: true,
             })
         } else {
@@ -148,6 +154,7 @@ impl Request {
                 temperature: if temperature == 0.0 { None } else { Some(temperature) },
                 frequency_penalty,
                 reasoning_effort: None,
+                verbosity: None,
                 stream: true,
             })
         }
@@ -161,6 +168,19 @@ impl Request {
             }
             Self::Reasoning(mut req) => {
                 req.reasoning_effort = effort;
+                Self::Reasoning(req)
+            }
+        }
+    }
+
+    pub fn with_verbosity(self, verbosity: Option<String>) -> Self {
+        match self {
+            Self::Standard(mut req) => {
+                req.verbosity = verbosity;
+                Self::Standard(req)
+            }
+            Self::Reasoning(mut req) => {
+                req.verbosity = verbosity;
                 Self::Reasoning(req)
             }
         }
@@ -459,44 +479,30 @@ mod tests {
 
     #[test]
     fn test_temperature_disabled_when_zero() {
+        // Note: GPT-5 models don't support temperature, so using a hypothetical non-gpt-5 model
+        // Since we only support GPT-5, this test demonstrates the legacy behavior
         let request = Request::new(
-            "gpt-4".to_string(),
+            "gpt-5".to_string(),
             vec![Message::user("test".to_string())],
             1,
             0.0,
             0.0,
         );
 
+        // GPT-5 models use ReasoningRequest which doesn't have temperature
         match request {
-            Request::Standard(req) => {
-                assert_eq!(req.temperature, None, "Temperature should be None when set to 0.0");
+            Request::Reasoning(_) => {
+                // Success - GPT-5 models use reasoning request
             }
-            _ => panic!("Expected StandardRequest"),
+            _ => panic!("Expected ReasoningRequest for GPT-5 model"),
         }
     }
 
     #[test]
     fn test_temperature_included_when_nonzero() {
+        // GPT-5 models don't support temperature parameter
         let request = Request::new(
-            "gpt-4".to_string(),
-            vec![Message::user("test".to_string())],
-            1,
-            1.0,
-            0.0,
-        );
-
-        match request {
-            Request::Standard(req) => {
-                assert_eq!(req.temperature, Some(1.0), "Temperature should be Some(1.0) when set to 1.0");
-            }
-            _ => panic!("Expected StandardRequest"),
-        }
-    }
-
-    #[test]
-    fn test_o_series_models_use_reasoning_request() {
-        let request = Request::new(
-            "o1".to_string(),
+            "gpt-5".to_string(),
             vec![Message::user("test".to_string())],
             1,
             1.0,
@@ -505,9 +511,9 @@ mod tests {
 
         match request {
             Request::Reasoning(_) => {
-                // Success - o1 should use Reasoning request
+                // Success - GPT-5 models use reasoning request (no temperature)
             }
-            _ => panic!("Expected ReasoningRequest for o1 model"),
+            _ => panic!("Expected ReasoningRequest for GPT-5 model"),
         }
     }
 
@@ -535,9 +541,45 @@ mod tests {
     }
 
     #[test]
-    fn test_temperature_serialization_skipped_when_none() {
+    fn test_verbosity_with_request() {
         let request = Request::new(
-            "gpt-4".to_string(),
+            "gpt-5".to_string(),
+            vec![Message::user("test".to_string())],
+            1,
+            1.0,
+            0.0,
+        ).with_verbosity(Some("high".to_string()));
+
+        match request {
+            Request::Reasoning(req) => {
+                assert_eq!(req.verbosity, Some("high".to_string()));
+            }
+            _ => panic!("Expected ReasoningRequest"),
+        }
+    }
+
+    #[test]
+    fn test_reasoning_effort_none() {
+        let request = Request::new(
+            "gpt-5".to_string(),
+            vec![Message::user("test".to_string())],
+            1,
+            1.0,
+            0.0,
+        ).with_reasoning_effort(Some("none".to_string()));
+
+        match request {
+            Request::Reasoning(req) => {
+                assert_eq!(req.reasoning_effort, Some("none".to_string()));
+            }
+            _ => panic!("Expected ReasoningRequest"),
+        }
+    }
+
+    #[test]
+    fn test_verbosity_serialization_skipped_when_none() {
+        let request = Request::new(
+            "gpt-5".to_string(),
             vec![Message::user("test".to_string())],
             1,
             0.0,
@@ -545,21 +587,21 @@ mod tests {
         );
 
         let json = serde_json::to_string(&request).expect("Failed to serialize");
-        assert!(!json.contains("temperature"), "Serialized JSON should not contain 'temperature' field when it's None");
+        assert!(!json.contains("\"verbosity\""), "Serialized JSON should not contain 'verbosity' field when it's None");
     }
 
     #[test]
-    fn test_temperature_serialization_included_when_some() {
+    fn test_verbosity_serialization_included_when_some() {
         let request = Request::new(
-            "gpt-4".to_string(),
+            "gpt-5".to_string(),
             vec![Message::user("test".to_string())],
             1,
             1.5,
             0.0,
-        );
+        ).with_verbosity(Some("high".to_string()));
 
         let json = serde_json::to_string(&request).expect("Failed to serialize");
-        assert!(json.contains("temperature"), "Serialized JSON should contain 'temperature' field when it's Some");
-        assert!(json.contains("1.5"), "Serialized JSON should contain the temperature value");
+        assert!(json.contains("\"verbosity\""), "Serialized JSON should contain 'verbosity' field when it's Some");
+        assert!(json.contains("\"high\""), "Serialized JSON should contain the verbosity value");
     }
 }

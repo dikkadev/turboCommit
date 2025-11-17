@@ -62,16 +62,22 @@ impl Actor {
             request = request.with_reasoning_effort(self.options.reasoning_effort.clone());
         }
 
+        // Add verbosity if specified
+        if let Some(ref verbosity) = self.options.verbosity {
+            request = request.with_verbosity(Some(verbosity.clone()));
+        }
+
         // Log request details
         let json = serde_json::to_string(&request)?;
         self.debug_logger.log_request(&json);
 
         // Log basic info about the request
         let info = format!(
-            "model={}, reasoning={}, effort={}, messages={}, tokens={}",
+            "model={}, reasoning={}, effort={}, verbosity={}, messages={}, tokens={}",
             self.options.model.0,
             self.options.enable_reasoning,
             self.options.reasoning_effort.as_deref().unwrap_or("none"),
+            self.options.verbosity.as_deref().unwrap_or("default"),
             self.messages.len(),
             self.used_tokens
         );
