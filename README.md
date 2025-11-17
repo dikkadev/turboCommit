@@ -4,17 +4,19 @@
 ![Crates.io](https://img.shields.io/crates/d/turbocommit)
 ![Crates.io](https://img.shields.io/crates/l/turbocommit)
 
-A powerful CLI tool that leverages OpenAI's GPT models to generate high-quality, conventional commit messages from your staged changes in Git and Jujutsu (JJ) repositories.
+A powerful CLI tool that leverages OpenAI's GPT-5.x models to generate high-quality, conventional commit messages from your staged changes in Git and Jujutsu (JJ) repositories.
 
 **Version 2.0 now supports both Git and Jujutsu (JJ) version control systems!**
+**Latest update: Exclusively uses GPT-5.x models with enhanced reasoning and verbosity controls!**
 
 ## Features
 
-- 🤖 Uses OpenAI's GPT models to analyze your staged changes
+- 🤖 **GPT-5.x Powered** - Exclusively uses the latest GPT-5 model family (gpt-5, gpt-5-nano, gpt-5-mini, gpt-5-codex)
 - 📝 Generates conventional commit messages that follow best practices
 - 🎯 Interactive selection from multiple commit message suggestions
 - ✏️ Edit messages directly or request AI revisions
-- 🧠 Advanced reasoning mode for enhanced AI interactions
+- 🧠 Advanced reasoning mode with configurable effort levels (including 'none' to disable)
+- 🗣️ **Verbosity controls** - Configure output detail level (low, medium, high)
 - 🔍 Comprehensive debugging capabilities with file or stdout logging
 - ⚡ Streaming responses for real-time feedback
 - 🔄 Auto-update checks to keep you on the latest version
@@ -53,27 +55,43 @@ After generating commit messages, you can:
 
 ### Options
 
-- `-n <number>` - Number of commit message suggestions to generate
-- `-t <temperature>` - Temperature for GPT model (0.0 to 2.0) (no effect in reasoning mode)
-- `-f <frequency_penalty>` - Frequency penalty (-2.0 to 2.0)
-- `-m <model>` - Specify the GPT model to use
-- `-r, --enable-reasoning` - Enable support for models with reasoning capabilities (like o-series)
-- `--reasoning-effort <level>` - Set reasoning effort for supported models (low/medium/high, default: medium)
+**Important: turboCommit now only supports GPT-5.x models (e.g., gpt-5, gpt-5-nano, gpt-5-mini, gpt-5-codex)**
+
+- `-n <number>` - Number of commit message suggestions to generate (default: 3)
+- `-m <model>` - Specify the GPT-5.x model to use (must start with 'gpt-5')
+  - Examples: `gpt-5`, `gpt-5-nano`, `gpt-5-mini`, `gpt-5-codex`
+- `-r, --enable-reasoning` - Enable reasoning mode (enabled by default for GPT-5.x)
+- `--reasoning-effort <level>` - Set reasoning effort level
+  - Options: `none` (disable reasoning), `low`, `medium` (default), `high`
+- `--verbosity <level>` - Control output verbosity
+  - Options: `low`, `medium`, `high`
 - `-d, --debug` - Show basic debug info in console
 - `--debug-file <path>` - Write detailed debug logs to file (use '-' for stdout)
 - `--auto-commit` - Automatically commit with the generated message
-- `--amend` - Amend the last commit with the generated message (useful with Git hooks)
+- `--amend` - Amend the last commit with the generated message
 - `--api-key <key>` - Provide API key directly
 - `--api-endpoint <url>` - Custom API endpoint URL
 - `-p, --print-once` - Disable streaming output
 
-#### Reasoning Mode
-When using models that support reasoning capabilities (like OpenAI's o-series), this mode enables their built-in reasoning features. These models are specifically designed to analyze code changes and generate commit messages with their own reasoning process.
+**Note:** Temperature (`-t`) and frequency penalty (`-f`) are legacy parameters and have no effect with GPT-5.x models, which use reasoning mode by default.
 
-Example usage:
+#### Reasoning Mode
+GPT-5.x models have built-in reasoning capabilities that are enabled by default. These models are specifically designed to analyze code changes and generate commit messages with advanced reasoning.
+
+You can control the reasoning effort level:
 ```bash
-turbocommit -r -m o3-mini -n 1  # Enable reasoning mode with default effort
-turbocommit -r --reasoning-effort high -m o3-mini -n 1  # Specify reasoning effort
+turbocommit -m gpt-5-mini                              # Default reasoning (medium)
+turbocommit --reasoning-effort high -m gpt-5           # High reasoning effort
+turbocommit --reasoning-effort low -m gpt-5-nano       # Low reasoning effort
+turbocommit --reasoning-effort none -m gpt-5-mini      # Disable reasoning features
+```
+
+#### Verbosity Control
+Control the level of detail in the model's responses:
+```bash
+turbocommit --verbosity low -m gpt-5-mini              # Concise output
+turbocommit --verbosity medium -m gpt-5                # Balanced output (default)
+turbocommit --verbosity high -m gpt-5                  # Detailed output
 ```
 
 #### Debugging
@@ -90,22 +108,6 @@ The debug logs include:
 - Timing information
 - Full request/response JSON (in file mode)
 
-### Model-Specific Notes
-
-Different models have different capabilities and limitations:
-
-#### O-Series Models (e.g., o3-mini)
-- Support reasoning mode
-- Do not support temperature/frequency parameters
-- May not support multiple choices (`-n`)
-- Optimized for specific tasks
-
-#### Standard GPT Models
-- Support all parameters
-- Multiple choices available
-- Temperature and frequency tuning
-- Standard reasoning capabilities
-
 For more options, run:
 ```bash
 turbocommit --help
@@ -115,9 +117,10 @@ turbocommit --help
 
 turboCommit creates a config file at `~/.turbocommit.yaml` on first run. You can customize:
 
-- Default model
+- Default GPT-5.x model
 - API endpoint
-- Temperature and frequency penalty
+- Reasoning effort level
+- Verbosity setting
 - Number of suggestions
 - System message prompt
 - Auto-update checks
@@ -126,15 +129,18 @@ turboCommit creates a config file at `~/.turbocommit.yaml` on first run. You can
 
 Example configuration:
 ```yaml
-model: "gpt-4"
-default_temperature: 1.0
-default_frequency_penalty: 0.0
+model: "gpt-5-mini"  # Must be a GPT-5.x model
 default_number_of_choices: 3
 enable_reasoning: true
-reasoning_effort: "medium"
+reasoning_effort: "medium"  # Options: none, low, medium, high
+verbosity: "medium"  # Options: low, medium, high
 disable_print_as_stream: false
 disable_auto_update_check: false
+api_endpoint: "https://api.openai.com/v1/chat/completions"
+api_key_env_var: "OPENAI_API_KEY"
 ```
+
+**Note:** The `default_temperature` and `default_frequency_penalty` settings are legacy parameters and are ignored by GPT-5.x models.
 
 ### Multiple Config Files
 
