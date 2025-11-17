@@ -61,9 +61,9 @@ After generating commit messages, you can:
 - `-m <model>` - Specify the GPT-5.1 model to use
   - Supported: `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`
 - `-r, --enable-reasoning` - Enable reasoning mode (enabled by default for GPT-5.1)
-- `--reasoning-effort <level>` - Set reasoning effort level
-  - Options: `none` (disable reasoning), `low`, `medium` (default), `high`
-- `--verbosity <level>` - Control output verbosity
+- `-e, --reasoning-effort <level>` - Set reasoning effort level
+  - Options: `none` (disable reasoning), `low` (default), `medium`, `high`
+- `-v, --verbosity <level>` - Control output verbosity
   - Options: `low`, `medium`, `high`
 - `-d, --debug` - Show basic debug info in console
 - `--debug-file <path>` - Write detailed debug logs to file (use '-' for stdout)
@@ -72,8 +72,6 @@ After generating commit messages, you can:
 - `--api-key <key>` - Provide API key directly
 - `--api-endpoint <url>` - Custom API endpoint URL
 - `-p, --print-once` - Disable streaming output
-
-**Note:** Temperature (`-t`) and frequency penalty (`-f`) are legacy parameters and have no effect with GPT-5.1 models, which use reasoning mode by default.
 
 #### Reasoning Mode
 GPT-5.1 models have built-in reasoning capabilities that are enabled by default. These models are specifically designed to analyze code changes and generate commit messages with advanced reasoning.
@@ -132,15 +130,12 @@ Example configuration:
 model: "gpt-5.1"  # Must be a GPT-5.1 model: gpt-5.1, gpt-5.1-codex, or gpt-5.1-codex-mini
 default_number_of_choices: 3
 enable_reasoning: true
-reasoning_effort: "medium"  # Options: none, low, medium, high
 verbosity: "medium"  # Options: low, medium, high
 disable_print_as_stream: false
 disable_auto_update_check: false
 api_endpoint: "https://api.openai.com/v1/chat/completions"
 api_key_env_var: "OPENAI_API_KEY"
 ```
-
-**Note:** The `default_temperature` and `default_frequency_penalty` settings are legacy parameters and are ignored by GPT-5.1 models.
 
 ### Multiple Config Files
 

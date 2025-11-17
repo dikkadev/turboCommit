@@ -9,8 +9,6 @@ use std::{cmp, env, process};
 pub struct Options {
     pub n: i32,
     pub msg: String,
-    pub t: f64,
-    pub f: f64,
     pub print_once: bool,
     pub model: model::Model,
     pub auto_commmit: bool,
@@ -38,8 +36,6 @@ impl From<&Config> for Options {
         Self {
             n: config.default_number_of_choices,
             msg: String::new(),
-            t: config.default_temperature,
-            f: config.default_frequency_penalty,
             print_once: config.disable_print_as_stream,
             model: config.model.clone(),
             auto_commmit: false,
@@ -86,36 +82,6 @@ impl Options {
                                 process::exit(1);
                             },
                             |n| cmp::max(1, n),
-                        );
-                    }
-                }
-                "-t" => {
-                    if let Some(t) = iter.next() {
-                        opts.t = t.parse().map_or_else(
-                            |_| {
-                                println!(
-                                    "{} {}",
-                                    "Could not parse t.".red(),
-                                    "Please enter a float between 0 and 2.".bright_black()
-                                );
-                                process::exit(1);
-                            },
-                            |t: f64| t.clamp(0.0, 2.0),
-                        );
-                    }
-                }
-                "-f" => {
-                    if let Some(f) = iter.next() {
-                        opts.f = f.parse().map_or_else(
-                            |_| {
-                                println!(
-                                    "{} {}",
-                                    "Could not parse f.".red(),
-                                    "Please enter a float between -2.0 and 2.0.".bright_black()
-                                );
-                                process::exit(1);
-                            },
-                            |f: f64| f.clamp(-2.0, 2.0),
                         );
                     }
                 }
@@ -192,7 +158,7 @@ impl Options {
                 "--reason" | "--enable-reasoning" => {
                     opts.enable_reasoning = true;
                     if opts.reasoning_effort.is_none() {
-                        opts.reasoning_effort = Some("medium".to_string());
+                        opts.reasoning_effort = Some("low".to_string());
                     }
                 }
                 "-v" | "--verbosity" => {
@@ -287,14 +253,6 @@ fn help() {
     println!("  -m <m>   Model to use (must be a GPT-5.1 model)\n  --model <m>");
     println!("           Examples: gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-mini\n");
     println!("  -p       Will not print tokens as they are generated.\n  --print-once \n");
-    println!(
-        "  -t <t>   Temperature (|t| 0.0 < t < 2.0) - Legacy parameter, ignored for GPT-5.1 models\n{}\n",
-        "(GPT-5.1 models use reasoning mode by default)"
-            .bright_black()
-    );
-    println!(
-        "  -f <f>   Frequency penalty (|f| -2.0 < f < 2.0) - Legacy parameter, ignored for GPT-5.1 models\n"
-    );
     println!("  -a, --auto-commit  Automatically generate and commit a single message\n");
     println!("  --amend  Amend the last commit with the generated message\n");
     println!("  --check-version  Check for updates and exit\n");
@@ -304,7 +262,7 @@ fn help() {
     println!("  --api-key <key>  Set the API key\n");
     println!("  --reason, --enable-reasoning  Enable reasoning mode (enabled by default for GPT-5.1)\n");
     println!("  -e, --reasoning-effort <effort>  Set the reasoning effort level\n");
-    println!("                              Values: none, low, medium, high (default: medium)\n");
+    println!("                              Values: none, low, medium, high (default: low)\n");
     println!("                              Use 'none' to disable reasoning features\n");
     println!("  -v, --verbosity <level>  Set output verbosity level\n");
     println!("                      Values: low, medium, high\n");
@@ -345,8 +303,6 @@ mod tests {
         let options = Options::from(&config);
 
         assert_eq!(options.n, config.default_number_of_choices);
-        assert_eq!(options.t, config.default_temperature);
-        assert_eq!(options.f, config.default_frequency_penalty);
         assert_eq!(options.print_once, config.disable_print_as_stream);
         assert_eq!(options.model, config.model);
         assert_eq!(options.enable_reasoning, config.enable_reasoning);
@@ -361,10 +317,6 @@ mod tests {
             "turbocommit",
             "-n",
             "3",
-            "-t",
-            "1.0",
-            "-f",
-            "0.5",
             "--print-once",
             "--model",
             "gpt-5.1",
@@ -380,8 +332,6 @@ mod tests {
         let options = Options::new(args.into_iter(), &config);
 
         assert_eq!(options.n, 3);
-        assert_eq!(options.t, 1.0);
-        assert_eq!(options.f, 0.5);
         assert_eq!(options.print_once, true);
         assert_eq!(options.model.0, "gpt-5.1");
         assert_eq!(options.enable_reasoning, true);
@@ -422,7 +372,7 @@ mod tests {
         assert!(options.debug);
         assert!(options.print_once); // Debug mode forces print_once
         assert!(options.enable_reasoning);
-        assert_eq!(options.reasoning_effort, Some("medium".to_string())); // Default effort
+        assert_eq!(options.reasoning_effort, Some("low".to_string())); // Default effort
         assert_eq!(options.model.0, "gpt-5.1-codex-mini");
     }
 

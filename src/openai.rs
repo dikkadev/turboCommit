@@ -133,31 +133,16 @@ impl Request {
         model: String,
         messages: Vec<Message>,
         n: i32,
-        temperature: f64,
-        frequency_penalty: f64,
     ) -> Self {
         // GPT-5.1 models use ReasoningRequest (no temperature/frequency support)
-        if model.starts_with("gpt-5.1") {
-            Self::Reasoning(ReasoningRequest {
-                model,
-                messages,
-                n,
-                reasoning_effort: None,
-                verbosity: None,
-                stream: true,
-            })
-        } else {
-            Self::Standard(StandardRequest {
-                model,
-                messages,
-                n,
-                temperature: if temperature == 0.0 { None } else { Some(temperature) },
-                frequency_penalty,
-                reasoning_effort: None,
-                verbosity: None,
-                stream: true,
-            })
-        }
+        Self::Reasoning(ReasoningRequest {
+            model,
+            messages,
+            n,
+            reasoning_effort: None,
+            verbosity: None,
+            stream: true,
+        })
     }
 
     pub fn with_reasoning_effort(self, effort: Option<String>) -> Self {
@@ -478,17 +463,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_temperature_disabled_when_zero() {
-        // GPT-5.1 models use ReasoningRequest which doesn't support temperature
+    fn test_gpt51_models_use_reasoning_request() {
+        // GPT-5.1 models use ReasoningRequest (no temperature/frequency support)
         let request = Request::new(
             "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
-            0.0,
-            0.0,
         );
 
-        // GPT-5.1 models use ReasoningRequest which doesn't have temperature
         match request {
             Request::Reasoning(_) => {
                 // Success - GPT-5.1 models use reasoning request
@@ -498,27 +480,8 @@ mod tests {
     }
 
     #[test]
-    fn test_temperature_included_when_nonzero() {
-        // GPT-5.1 models don't support temperature parameter
-        let request = Request::new(
-            "gpt-5.1".to_string(),
-            vec![Message::user("test".to_string())],
-            1,
-            1.0,
-            0.0,
-        );
-
-        match request {
-            Request::Reasoning(_) => {
-                // Success - GPT-5.1 models use reasoning request (no temperature)
-            }
-            _ => panic!("Expected ReasoningRequest for GPT-5.1 model"),
-        }
-    }
-
-    #[test]
-    fn test_gpt51_models_use_reasoning_request() {
-        // Test all GPT-5.1 variants use Reasoning request (no temperature support)
+    fn test_all_gpt51_variants_use_reasoning_request() {
+        // Test all GPT-5.1 variants use Reasoning request
         let models = vec!["gpt-5.1", "gpt-5.1-codex", "gpt-5.1-codex-mini"];
         
         for model_name in models {
@@ -526,8 +489,6 @@ mod tests {
                 model_name.to_string(),
                 vec![Message::user("test".to_string())],
                 1,
-                1.0,
-                0.0,
             );
 
             match request {
@@ -545,8 +506,6 @@ mod tests {
             "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
-            1.0,
-            0.0,
         ).with_verbosity(Some("high".to_string()));
 
         match request {
@@ -563,8 +522,6 @@ mod tests {
             "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
-            1.0,
-            0.0,
         ).with_reasoning_effort(Some("none".to_string()));
 
         match request {
@@ -581,8 +538,6 @@ mod tests {
             "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
-            0.0,
-            0.0,
         );
 
         let json = serde_json::to_string(&request).expect("Failed to serialize");
@@ -595,8 +550,6 @@ mod tests {
             "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
-            1.5,
-            0.0,
         ).with_verbosity(Some("high".to_string()));
 
         let json = serde_json::to_string(&request).expect("Failed to serialize");

@@ -53,8 +53,6 @@ impl Actor {
             self.options.model.clone().to_string(),
             self.messages.clone(),
             n,
-            self.options.t,
-            self.options.f,
         );
 
         // Add reasoning effort if reasoning mode is enabled

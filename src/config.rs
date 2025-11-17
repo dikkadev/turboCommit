@@ -25,10 +25,6 @@ pub struct Config {
     #[serde(default)]
     pub api_key_env_var: String,
     #[serde(default)]
-    pub default_temperature: f64,
-    #[serde(default)]
-    pub default_frequency_penalty: f64,
-    #[serde(default)]
     pub default_number_of_choices: i32,
     #[serde(default)]
     pub disable_print_as_stream: bool,
@@ -50,8 +46,6 @@ impl Default for Config {
             model: model::Model("gpt-5.1".to_string()),
             api_endpoint: String::from("https://api.openai.com/v1/chat/completions"),
             api_key_env_var: String::from("OPENAI_API_KEY"),
-            default_temperature: 1.05,
-            default_frequency_penalty: 0.0,
             default_number_of_choices: 3,
             disable_print_as_stream: false,
             disable_auto_update_check: false,
@@ -318,22 +312,6 @@ impl Config {
             });
         }
 
-        // Validate temperature
-        if !(0.0..=2.0).contains(&self.default_temperature) {
-            errors.push(ValidationError {
-                field: "default_temperature".to_string(),
-                message: format!("Temperature must be between 0.0 and 2.0 (default: {})", default.default_temperature),
-            });
-        }
-
-        // Validate frequency penalty
-        if !(-2.0..=2.0).contains(&self.default_frequency_penalty) {
-            errors.push(ValidationError {
-                field: "default_frequency_penalty".to_string(),
-                message: format!("Frequency penalty must be between -2.0 and 2.0 (default: {})", default.default_frequency_penalty),
-            });
-        }
-
         // Validate number of choices
         if self.default_number_of_choices < 1 {
             errors.push(ValidationError {
@@ -396,24 +374,6 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_invalid_temperature() {
-        let mut config = Config::default();
-        config.default_temperature = 2.5;
-        let errors = config.validate().unwrap_err();
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].field, "default_temperature");
-    }
-
-    #[test]
-    fn test_validate_invalid_frequency_penalty() {
-        let mut config = Config::default();
-        config.default_frequency_penalty = -3.0;
-        let errors = config.validate().unwrap_err();
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].field, "default_frequency_penalty");
-    }
-
-    #[test]
     fn test_validate_invalid_number_of_choices() {
         let mut config = Config::default();
         config.default_number_of_choices = 0;
@@ -435,19 +395,16 @@ mod tests {
     fn test_validate_multiple_errors() {
         let mut config = Config::default();
         config.model = model::Model(String::new());
-        config.default_temperature = 3.0;
         config.system_msg = "".to_string();
         let errors = config.validate().unwrap_err();
-        assert_eq!(errors.len(), 3);
+        assert_eq!(errors.len(), 2);
     }
 
     #[test]
     fn test_load_valid_config() {
         let config_content = r#"
-model: gpt-4
+model: gpt-5.1
 api_endpoint: https://api.openai.com/v1/chat/completions
-default_temperature: 1.0
-default_frequency_penalty: 0.0
 default_number_of_choices: 3
 disable_print_as_stream: false
 disable_auto_update_check: true
@@ -500,7 +457,6 @@ system_msg: "Test message"
     fn test_validation_error_includes_defaults() {
         let mut config = Config::default();
         config.model = model::Model(String::new());
-        config.default_temperature = 3.0;
         
         let errors = config.validate().unwrap_err();
         let default = Config::default();
@@ -508,19 +464,13 @@ system_msg: "Test message"
         // Find the model error
         let model_error = errors.iter().find(|e| e.field == "model").unwrap();
         assert!(model_error.message.contains(&default.model.0));
-        
-        // Find the temperature error
-        let temp_error = errors.iter().find(|e| e.field == "default_temperature").unwrap();
-        assert!(temp_error.message.contains(&default.default_temperature.to_string()));
     }
 
     #[test]
     fn test_empty_system_msg_shows_default() {
         let config_content = r#"
-model: gpt-4
+model: gpt-5.1
 api_endpoint: https://api.openai.com/v1/chat/completions
-default_temperature: 1.0
-default_frequency_penalty: 0.0
 default_number_of_choices: 3
 disable_print_as_stream: false
 disable_auto_update_check: false
@@ -570,10 +520,8 @@ system_msg: ""
     #[test]
     fn test_load_from_path_valid_config() {
         let config_content = r#"
-model: gpt-4
+model: gpt-5.1
 api_endpoint: https://api.openai.com/v1/chat/completions
-default_temperature: 1.0
-default_frequency_penalty: 0.0
 default_number_of_choices: 3
 disable_print_as_stream: false
 disable_auto_update_check: true
@@ -584,8 +532,7 @@ system_msg: "Test message"
         let config = Config::load_from_path(&file_path);
         assert!(config.is_ok());
         let config = config.unwrap();
-        assert_eq!(config.model.0, "gpt-4");
-        assert_eq!(config.default_temperature, 1.0);
+        assert_eq!(config.model.0, "gpt-5.1");
         assert!(config.disable_auto_update_check);
         assert_eq!(config.system_msg, "Test message");
     }
@@ -614,8 +561,6 @@ system_msg: "Test message"
         let config_content = r#"
 model: ""  # Empty model is invalid
 api_endpoint: not-a-url
-default_temperature: 3.0  # Out of range
-default_frequency_penalty: 0.0
 default_number_of_choices: 3
 disable_print_as_stream: false
 disable_auto_update_check: false
@@ -628,16 +573,13 @@ system_msg: "Test message"
         let err = config.unwrap_err().to_string();
         assert!(err.contains("model"));  // Should mention empty model error
         assert!(err.contains("api_endpoint"));  // Should mention invalid URL error
-        assert!(err.contains("temperature"));  // Should mention temperature range error
     }
 
     #[test]
     fn test_load_from_path_empty_system_msg() {
         let config_content = r#"
-model: "gpt-4"
+model: "gpt-5.1"
 api_endpoint: "https://api.openai.com/v1/chat/completions"
-default_temperature: 1.0
-default_frequency_penalty: 0.0
 default_number_of_choices: 3
 disable_print_as_stream: false
 disable_auto_update_check: false
