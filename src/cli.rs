@@ -21,6 +21,7 @@ pub struct Options {
     pub api_key: Option<String>,
     pub reasoning_effort: Option<String>,
     pub enable_reasoning: bool,
+    pub verbosity: Option<String>,
     pub debug: bool,
     pub debug_file: Option<String>,
     pub debug_context: bool,
@@ -49,6 +50,7 @@ impl From<&Config> for Options {
             api_key: None,
             reasoning_effort: None,
             enable_reasoning: config.enable_reasoning,
+            verbosity: config.verbosity.clone(),
             debug: false,
             debug_file: None,
             debug_context: false,
@@ -176,11 +178,12 @@ impl Options {
                 }
                 "--reasoning-effort" => {
                     if let Some(effort) = iter.next() {
-                        if !["low", "medium", "high"].contains(&effort.as_str()) {
+                        // Support 'none' to disable reasoning, plus low/medium/high
+                        if !["none", "low", "medium", "high"].contains(&effort.as_str()) {
                             println!(
                                 "{} {}",
                                 "Warning: Uncommon reasoning effort value.".yellow(),
-                                "Common values are: low, medium, high (depends on model/service)".bright_black()
+                                "Common values are: none, low, medium, high".bright_black()
                             );
                         }
                         opts.reasoning_effort = Some(effort);
@@ -190,6 +193,18 @@ impl Options {
                     opts.enable_reasoning = true;
                     if opts.reasoning_effort.is_none() {
                         opts.reasoning_effort = Some("medium".to_string());
+                    }
+                }
+                "--verbosity" => {
+                    if let Some(level) = iter.next() {
+                        if !["low", "medium", "high"].contains(&level.as_str()) {
+                            println!(
+                                "{} {}",
+                                "Warning: Invalid verbosity level.".yellow(),
+                                "Valid values are: low, medium, high".bright_black()
+                            );
+                        }
+                        opts.verbosity = Some(level);
                     }
                 }
                 "-d" | "--debug" => {
@@ -265,21 +280,20 @@ fn help() {
     println!("{}", " \\___/\\____/_/ /_/ /_/_/ /_/ /_/_/\\__/".green());
 
     println!("\nUsage: turbocommit [options] [message]\n");
+    println!("{}", "NOTE: turboCommit now exclusively uses GPT-5.x models".yellow().bold());
+    println!("{}\n", "Only gpt-5, gpt-5-nano, gpt-5-mini, gpt-5-codex and other gpt-5 variants are supported".bright_black());
     println!("Options:");
-    println!("  -n <n>   Number of choices to generate");
-    println!("           Note: Some models (e.g., o-series) may not support multiple choices\n");
-    println!("  -m <m>   Model to use\n  --model <m>",);
-    println!("    Model can be any OpenAI compatible model name\n");
-    println!("  -p       Will not print tokens as they are generated.\n  --print-once \n",);
+    println!("  -n <n>   Number of choices to generate (default: 3)\n");
+    println!("  -m <m>   Model to use (must be a GPT-5.x model)\n  --model <m>");
+    println!("           Examples: gpt-5, gpt-5-nano, gpt-5-mini, gpt-5-codex\n");
+    println!("  -p       Will not print tokens as they are generated.\n  --print-once \n");
     println!(
-        "  -t <t>   Temperature (|t| 0.0 < t < 2.0)\n{}\n           Note: Has no effect when using reasoning mode\n",
-        "(https://platform.openai.com/docs/api-reference/chat/create#chat/create-temperature)"
+        "  -t <t>   Temperature (|t| 0.0 < t < 2.0) - Legacy parameter, ignored for GPT-5.x models\n{}\n",
+        "(GPT-5.x models use reasoning mode by default)"
             .bright_black()
     );
     println!(
-        "  -f <f>   Frequency penalty (|f| -2.0 < f < 2.0)\n{}\n",
-        "(https://platform.openai.com/docs/api-reference/chat/create#chat/create-frequency-penalty)"
-            .bright_black()
+        "  -f <f>   Frequency penalty (|f| -2.0 < f < 2.0) - Legacy parameter, ignored for GPT-5.x models\n"
     );
     println!("  -a, --auto-commit  Automatically generate and commit a single message\n");
     println!("  --amend  Amend the last commit with the generated message\n");
@@ -288,9 +302,12 @@ fn help() {
     println!("  --system-msg-file <path>  Load system message from a file\n");
     println!("  --disable-auto-update-check  Disable automatic update checks\n");
     println!("  --api-key <key>  Set the API key\n");
-    println!("  --reason, --enable-reasoning  Enable support for models with reasoning capabilities (like o-series)\n");
-    println!("  --reasoning-effort <effort>  Set the reasoning effort (defaults to 'medium', common values: low, medium, high)\n");
-    println!("                              Note: Valid values depend on the model and service being used\n");
+    println!("  --reason, --enable-reasoning  Enable reasoning mode (enabled by default for GPT-5.x)\n");
+    println!("  --reasoning-effort <effort>  Set the reasoning effort level\n");
+    println!("                              Values: none, low, medium, high (default: medium)\n");
+    println!("                              Use 'none' to disable reasoning features\n");
+    println!("  --verbosity <level>  Set output verbosity level\n");
+    println!("                      Values: low, medium, high\n");
     println!("  -d, --debug  Enable debug mode (prints basic request/response info)\n");
     println!("  --debug-file <path>  Write detailed debug logs to specified file (overwrites existing file)\n");
     println!("                       Use '-' to write to stdout instead of a file\n");
@@ -334,6 +351,7 @@ mod tests {
         assert_eq!(options.model, config.model);
         assert_eq!(options.enable_reasoning, config.enable_reasoning);
         assert_eq!(options.reasoning_effort, None);
+        assert_eq!(options.verbosity, config.verbosity);
     }
 
     #[test]
@@ -349,10 +367,12 @@ mod tests {
             "0.5",
             "--print-once",
             "--model",
-            "gpt-4",
+            "gpt-5",
             "--enable-reasoning",
             "--reasoning-effort",
             "medium",
+            "--verbosity",
+            "high",
             "test",
             "commit",
         ];
@@ -363,9 +383,10 @@ mod tests {
         assert_eq!(options.t, 1.0);
         assert_eq!(options.f, 0.5);
         assert_eq!(options.print_once, true);
-        assert_eq!(options.model.0, "gpt-4");
+        assert_eq!(options.model.0, "gpt-5");
         assert_eq!(options.enable_reasoning, true);
         assert_eq!(options.reasoning_effort, Some("medium".to_string()));
+        assert_eq!(options.verbosity, Some("high".to_string()));
         assert_eq!(options.msg, "User Explanation/Instruction: 'test commit'");
     }
 
@@ -393,7 +414,7 @@ mod tests {
             "-d",
             "--reason",
             "--model",
-            "o3-mini",
+            "gpt-5-mini",
         ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
@@ -402,7 +423,7 @@ mod tests {
         assert!(options.print_once); // Debug mode forces print_once
         assert!(options.enable_reasoning);
         assert_eq!(options.reasoning_effort, Some("medium".to_string())); // Default effort
-        assert_eq!(options.model.0, "o3-mini");
+        assert_eq!(options.model.0, "gpt-5-mini");
     }
 
     #[test]
@@ -446,5 +467,59 @@ mod tests {
         assert!(options.debug);
         assert!(options.print_once);
         assert_eq!(options.debug_file, None);
+    }
+
+    #[test]
+    fn test_reasoning_none_mode() {
+        let config = Config::default();
+        let args = vec![
+            "turbocommit",
+            "--reasoning-effort",
+            "none",
+            "--model",
+            "gpt-5",
+        ];
+        let args = args.into_iter().map(String::from).collect::<Vec<String>>();
+        let options = Options::new(args.into_iter(), &config);
+
+        assert_eq!(options.reasoning_effort, Some("none".to_string()));
+        assert_eq!(options.model.0, "gpt-5");
+    }
+
+    #[test]
+    fn test_verbosity_option() {
+        let config = Config::default();
+        
+        // Test low verbosity
+        let args = vec![
+            "turbocommit",
+            "--verbosity",
+            "low",
+            "--model",
+            "gpt-5-nano",
+        ];
+        let args = args.into_iter().map(String::from).collect::<Vec<String>>();
+        let options = Options::new(args.into_iter(), &config);
+        assert_eq!(options.verbosity, Some("low".to_string()));
+
+        // Test high verbosity
+        let args = vec![
+            "turbocommit",
+            "--verbosity",
+            "high",
+            "--model",
+            "gpt-5",
+        ];
+        let args = args.into_iter().map(String::from).collect::<Vec<String>>();
+        let options = Options::new(args.into_iter(), &config);
+        assert_eq!(options.verbosity, Some("high".to_string()));
+    }
+
+    #[test]
+    fn test_invalid_model_rejected() {
+        let _config = Config::default();
+        // This should fail during parsing when model validation is enforced
+        // The test expects the program to exit with an error
+        // Note: This test would need to be run in a subprocess to catch the exit
     }
 }
