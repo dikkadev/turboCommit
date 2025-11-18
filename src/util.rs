@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use colored::Colorize;
 use inquire::MultiSelect;
-use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{config::Config, git, jj, openai};
 
@@ -103,39 +102,12 @@ pub fn decide_diff_jj(
             modified_files.clone(),
         )
         .prompt()?;
-        
+
         // Get diff for selected files only
         diff = jj::get_jj_diff_for_files(revision, &selected_files)?;
         diff_tokens = openai::count_token(&diff)?;
     }
     Ok((diff, diff_tokens))
-}
-
-#[must_use]
-pub fn count_lines(text: &str, max_width: usize) -> u16 {
-    if text.is_empty() {
-        return 0;
-    }
-    let mut line_count = 0;
-    let mut current_line_width = 0;
-    for cluster in UnicodeSegmentation::graphemes(text, true) {
-        match cluster {
-            "\r" | "\u{FEFF}" => {}
-            "\n" => {
-                line_count += 1;
-                current_line_width = 0;
-            }
-            _ => {
-                current_line_width += 1;
-                if current_line_width > max_width {
-                    line_count += 1;
-                    current_line_width = cluster.chars().count();
-                }
-            }
-        }
-    }
-
-    line_count + 1
 }
 
 pub fn check_config_age(max_age: Duration) -> bool {
@@ -228,17 +200,19 @@ fn process_response(response: &str) -> String {
             let thinking = &response[think_start + 7..think_end];
             // Get message part and trim any whitespace including newlines at start/end
             let message_part = response[think_end + 8..].trim_matches(|c: char| c.is_whitespace());
-            
+
             // Print the thinking section nicely
             println!("\n{}", "AI's Thought Process:".blue().bold());
             println!("{}", thinking.bright_black());
             println!("\n{}", "Generated Commit Message:".blue().bold());
             println!("[0] {}", "=".repeat(76));
             println!("{}", message_part);
-            
+
             return message_part.to_string();
         }
     }
     // If no think tags found, return the original response trimmed of all whitespace including newlines
-    response.trim_matches(|c: char| c.is_whitespace()).to_string()
+    response
+        .trim_matches(|c: char| c.is_whitespace())
+        .to_string()
 }

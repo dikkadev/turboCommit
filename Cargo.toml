@@ -23,12 +23,10 @@ home = "0.5.4"
 inquire = "0.6.0"
 jj-lib = "0.34.0"
 pollster = "0.4.0"
-reqwest-eventsource = "0.4.0"
 serde_json = "1.0.93"
 serde_yaml = "0.9.19"
 terminal-supports-emoji = "0.1.3"
 tiktoken-rs = "0.2.2"
-unicode-segmentation = "1.10.1"
 url = "2.4.1"
 
 [dev-dependencies]
@@ -36,7 +34,7 @@ tempfile = "3.4.0"
 
 [dependencies.reqwest]
 version = "0.11.14"
-features = [ "stream",]
+features = [ "json",]
 
 [dependencies.serde]
 version = "1.0.152"

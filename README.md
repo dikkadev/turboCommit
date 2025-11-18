@@ -17,8 +17,8 @@ A powerful CLI tool that leverages OpenAI's GPT-5.1 models to generate high-qual
 - ✏️ Edit messages directly or request AI revisions
 - 🧠 Advanced reasoning mode with configurable effort levels (including 'none' to disable)
 - 🗣️ **Verbosity controls** - Configure output detail level (low, medium, high)
+- 🧱 Structured outputs ensure consistent multi-choice commit suggestions
 - 🔍 Comprehensive debugging capabilities with file or stdout logging
-- ⚡ Streaming responses for real-time feedback
 - 🔄 Auto-update checks to keep you on the latest version
 - 🎨 Beautiful terminal UI with color-coded output
 - ⚙️ Configurable settings via YAML config file
@@ -70,7 +70,6 @@ After generating commit messages, you can:
 - `--amend` - Amend the last commit with the generated message
 - `--api-key <key>` - Provide API key directly
 - `--api-endpoint <url>` - Custom API endpoint URL
-- `-p, --print-once` - Disable streaming output
 
 #### Reasoning Mode
 GPT-5.1 models have built-in reasoning capabilities. You can control the reasoning effort level which affects the depth of analysis:
@@ -130,7 +129,6 @@ model: "gpt-5.1"  # Must be a GPT-5.1 model: gpt-5.1, gpt-5.1-codex, or gpt-5.1-
 default_number_of_choices: 3
 reasoning_effort: "low"  # Options: none, low, medium, high
 verbosity: "medium"  # Options: low, medium, high
-disable_print_as_stream: false
 disable_auto_update_check: false
 api_endpoint: "https://api.openai.com/v1/chat/completions"
 api_key_env_var: "OPENAI_API_KEY"

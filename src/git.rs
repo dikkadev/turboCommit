@@ -64,14 +64,11 @@ pub fn get_last_commit_diff(repo: &Repository) -> Result<String, git2::Error> {
     let mut ret = String::new();
     let head = repo.head()?;
     let head_commit = head.peel_to_commit()?;
-    
+
     if let Some(parent) = head_commit.parent(0).ok() {
-        let diff = repo.diff_tree_to_tree(
-            Some(&parent.tree()?),
-            Some(&head_commit.tree()?),
-            None,
-        )?;
-        
+        let diff =
+            repo.diff_tree_to_tree(Some(&parent.tree()?), Some(&head_commit.tree()?), None)?;
+
         diff.print(git2::DiffFormat::Patch, |_, _, line| {
             ret.push(line.origin());
             ret.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
@@ -100,7 +97,7 @@ pub fn commit(message: String, amend: bool) -> anyhow::Result<()> {
         cmd.arg("--no-edit"); // This prevents git from opening the editor
     }
     cmd.arg("-m").arg(message);
-    
+
     let output = cmd.output()?;
     if !output.status.success() {
         return Err(anyhow::anyhow!(

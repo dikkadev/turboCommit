@@ -27,8 +27,6 @@ pub struct Config {
     #[serde(default)]
     pub default_number_of_choices: i32,
     #[serde(default)]
-    pub disable_print_as_stream: bool,
-    #[serde(default)]
     pub disable_auto_update_check: bool,
     #[serde(default)]
     pub reasoning_effort: String,
@@ -47,104 +45,58 @@ impl Default for Config {
             api_endpoint: String::from("https://api.openai.com/v1/chat/completions"),
             api_key_env_var: String::from("OPENAI_API_KEY"),
             default_number_of_choices: 3,
-            disable_print_as_stream: false,
             disable_auto_update_check: false,
             reasoning_effort: String::from("low"),
             verbosity: String::from("medium"),
             jj_rewrite_default: false, // Default to overwrite mode
-            system_msg: String::from("You are a specialized AI that generates conventional commit messages based on git diffs. Your ONLY purpose is to produce properly formatted conventional commits that follow the exact specification at conventionalcommits.org.
+            system_msg: String::from("You are a specialized AI that generates high-quality conventional commit suggestions from git diffs. Your ONLY purpose is to produce properly formatted commits that follow the exact specification at conventionalcommits.org.
 
-# INPUT AND RESPONSE FORMAT
+# INPUTS
 - You will receive a git diff of staged files
-- You MAY additionally receive a single line that begins with \"Current description: \" followed by a prior/assistant-provided commit message hint
-- You MUST respond ONLY with a single, properly formatted conventional commit message
-- Your response must NOT be formatted as markdown or contain any other markup
-- Your response must consist of a single headline and optionally one body paragraph
-- Never include multiple commits or bullet points in your response
+- You MAY also receive a line starting with \"Current description:\" that contains the user's own summary/hint
+- Additional user messages may request edits or add requirements
+
+# OUTPUT FORMAT (MANDATORY)
+- You MUST respond with JSON that satisfies the provided structured-output schema
+- Populate the `suggestions` array with exactly the requested number of entries
+- Each suggestion object must contain:
+  - `title`: the conventional commit header (`<type>[optional scope][!]: <description>`)
+  - `body`: optional string (or null) containing a single concise paragraph explaining the WHY behind the change
+- Never include Markdown, bullet lists, or explanatory prose outside of the structured fields
 
 # COMMIT PHILOSOPHY
-- Focus primarily on WHY the change was made, not WHAT was changed (the diff already shows the what)
-- A good commit explains the intent, motivation, and reasoning behind the change
-- Commits should provide context that isn't obvious from the code itself
-- Think at a higher abstraction level than the code - capture the purpose, not the implementation
+- Prioritize WHY the change exists over WHAT code was touched
+- Surface user intent, motivation, and non-obvious implications
+- Operate at a higher abstraction level than the diff itself
 
 # VERBOSITY GUIDANCE
-- The verbosity parameter indicates the desired level of detail in the commit message
-- For LOW verbosity: Keep it minimal - title only unless absolutely critical context is missing
-- For MEDIUM verbosity: Include a body when the change benefits from additional context about the WHY
-- For HIGH verbosity: You should very likely include a body paragraph that explains the reasoning, motivation, and context behind the change in more detail
+- `verbosity = low`: prefer title-only unless context is critically missing
+- `verbosity = medium`: include a body when it clarifies motivation
+- `verbosity = high`: almost always include a thoughtful body paragraph
 
-# CONVENTIONAL COMMIT STRUCTURE
-<type>[optional scope][!]: <description>
-
-[optional body]
-
-[optional footer(s)]
-
-# COMMIT RULES
-1. Type: MUST be one of these nouns:
-   - 'feat': introduces a new feature (correlates with MINOR in SemVer)
-   - 'fix': patches a bug (correlates with PATCH in SemVer)
-   - 'docs': documentation changes only
-   - 'style': changes that don't affect code meaning (whitespace, formatting, etc.)
-   - 'refac': code change that neither fixes a bug nor adds a feature
-   - 'test': adding or correcting tests
-   - 'build': changes affecting build system or external dependencies
-   - 'ci': changes to CI configuration files and scripts
-   - 'chore': other changes
-
-2. Scope: OPTIONAL (but preferred), must be a noun in parentheses describing a section of the codebase
-   Example: feat(parser): add ability to parse arrays
-
-3. Breaking Change: Indicated by adding '!' before the colon or by adding a 'BREAKING CHANGE:' footer
-   Example: feat(api)!: remove deprecated endpoints
-
-4. Description: MUST immediately follow the colon and space after type/scope
-   - Use imperative, present tense: 'add' not 'added' or 'adds'
-   - Don't capitalize first letter
-   - No period at the end
-   - Focus on the intent rather than implementation details
-   - Be specific yet concise about the change's purpose
-
-5. Body: OPTIONAL but when present MUST:
-   - Be separated from description by a blank line
-   - Be a single concise paragraph explaining the motivation and context
-   - Focus on WHY the change was needed, not what was changed
-   - Explain the problem being solved, not how you solved it
-   - Describe intent, rationale, and underlying reasons for the change
-   - Highlight non-obvious implications or connections to other parts of the system
-   - Never be a list of changes (the git diff already shows this)
-   - Follow the KISS principle: brief but meaningful
-   - Provide context without being verbose
-
-6. Footer: OPTIONAL, must be separated from body by blank line
-   Example: BREAKING CHANGE: configuration format has changed
+# CONVENTIONAL COMMIT RULES
+1. Types: feat, fix, docs, style, refac, test, build, ci, chore
+2. Scope: optional noun in parentheses describing the impacted area
+3. Breaking changes: add `!` before the colon or include a `BREAKING CHANGE:` footer (in body)
+4. Description: imperative, lowercase start, no trailing period, focus on intent
+5. Body (when present):
+   - Blank line between title and body
+   - Single paragraph centred on motivation and reasoning
+   - Never re-list code changes; explain purpose and impact instead
+6. Trust the \"Current description\" hint unless it contradicts the diff. Rephrase it into proper conventional commit style while preserving the core intent.
 
 # EXAMPLES
-feat: add user authentication feature
-fix(database): resolve connection timeout issue
-refactor!: change API response format
-chore: update dependencies to latest versions
-
-# HIGH-LEVEL COMMIT EXAMPLES WITH BODY
-feat(auth): implement OAuth2 login flow
-
-Enable users to authenticate via third-party providers instead of managing credentials locally, improving security and reducing friction in the sign-up process.
-
-fix(performance): optimize database query pagination
-
-Resolves timeout issues during high traffic periods by implementing cursor-based pagination instead of offset-based, dramatically reducing query execution time.
+- feat(auth): implement OAuth2 login flow
+  Body: Explain why centralized auth improves security/user experience.
+- fix(perf): reduce query latency under load
+  Body: Describe the root cause and why the fix works.
 
 # ADDITIONAL INSTRUCTIONS
-- If a \"Current description: \" hint is provided, you MUST actively leverage it: analyze and extract its core intent, motivation, and messaging direction
-- The hint reflects the user's understanding of WHY the change matters; use it to strongly shape your type/scope/body choices and to emphasize key reasoning
-- Always reword the hint to follow conventional commit style (imperative mood, lowercase start, no period), but preserve and prioritize its semantic content
-- Only contradict hint content if it factually conflicts with the diff; otherwise trust and fully incorporate the hint's framing and emphasis
-- User may provide specific instructions or additional context - incorporate only if relevant
-- User may ask for revisions - be responsive to feedback
-- NEVER include explanations about your reasoning or analysis - ONLY output the commit message
-
-Remember: Always prioritize clarity and precision over verbosity."),
+- Always follow the schema; never emit free-form text
+- Respect user edits/revision requests exactly
+- If reasoning effort is `none`, keep responses efficient but still valid
+- If verbosity is `high`, lean into clear, motivating context without rambling
+- Never explain your reasoning or the schema back to the user; just output structured suggestions"),
         }
     }
 }
@@ -154,25 +106,21 @@ impl Config {
         //debug log the path we load from
         println!("Loading config from path: {}", path.display());
         let config = match std::fs::read_to_string(path) {
-            Ok(config_str) => {
-                match serde_yaml::from_str::<Self>(&config_str) {
-                    Ok(config) => config,
-                    Err(err) => {
-                        return Err(anyhow::anyhow!("Configuration file parsing error: {}", err));
-                    }
+            Ok(config_str) => match serde_yaml::from_str::<Self>(&config_str) {
+                Ok(config) => config,
+                Err(err) => {
+                    return Err(anyhow::anyhow!("Configuration file parsing error: {}", err));
                 }
             },
-            Err(err) => {
-                match err.kind() {
-                    std::io::ErrorKind::NotFound => {
-                        println!("{}", format!("Config file not found at: {}", path.display()).red());
-                        process::exit(1);
-                    }
-                    _ => {
-                        return Err(anyhow::anyhow!("Error reading configuration file: {}", err));
-                    }
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => {
+                    let msg = format!("Config file not found at: {}", path.display());
+                    return Err(anyhow::anyhow!(msg));
                 }
-            }
+                _ => {
+                    return Err(anyhow::anyhow!("Error reading configuration file: {}", err));
+                }
+            },
         };
 
         // Validate the configuration
@@ -181,14 +129,17 @@ impl Config {
             for error in validation_errors {
                 error_msg.push_str(&format!("  {}\n", error));
             }
-            error_msg.push_str(&format!("\nConfiguration file location: {}", path.display()));
-            
+            error_msg.push_str(&format!(
+                "\nConfiguration file location: {}",
+                path.display()
+            ));
+
             // If system message is empty, show the default
             if config.system_msg.trim().is_empty() {
                 error_msg.push_str("\n\nDefault system message:\n");
                 error_msg.push_str(&Self::default().system_msg);
             }
-            
+
             return Err(anyhow::anyhow!(error_msg));
         }
 
@@ -211,29 +162,33 @@ impl Config {
         );
 
         let config = match std::fs::read_to_string(&path) {
-            Ok(config_str) => {
-                match serde_yaml::from_str::<Self>(&config_str) {
-                    Ok(config) => config,
-                    Err(err) => {
-                        return Err(anyhow::anyhow!("Configuration file parsing error: {}", err));
-                    }
+            Ok(config_str) => match serde_yaml::from_str::<Self>(&config_str) {
+                Ok(config) => config,
+                Err(err) => {
+                    return Err(anyhow::anyhow!("Configuration file parsing error: {}", err));
                 }
             },
-            Err(err) => {
-                match err.kind() {
-                    std::io::ErrorKind::NotFound => {
-                        println!("{}", "No configuration file found, creating one with default values.".bright_black());
-                        let default = Self::default();
-                        if let Err(e) = default.save_if_changed() {
-                            println!("{}", format!("Warning: Failed to create default config file: {}", e).yellow());
-                        }
-                        default
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => {
+                    println!(
+                        "{}",
+                        "No configuration file found, creating one with default values."
+                            .bright_black()
+                    );
+                    let default = Self::default();
+                    if let Err(e) = default.save_if_changed() {
+                        println!(
+                            "{}",
+                            format!("Warning: Failed to create default config file: {}", e)
+                                .yellow()
+                        );
                     }
-                    _ => {
-                        return Err(anyhow::anyhow!("Error reading configuration file: {}", err));
-                    }
+                    default
                 }
-            }
+                _ => {
+                    return Err(anyhow::anyhow!("Error reading configuration file: {}", err));
+                }
+            },
         };
 
         // Validate the configuration
@@ -242,14 +197,17 @@ impl Config {
             for error in validation_errors {
                 error_msg.push_str(&format!("  {}\n", error));
             }
-            error_msg.push_str(&format!("\nConfiguration file location: {}", path.display()));
-            
+            error_msg.push_str(&format!(
+                "\nConfiguration file location: {}",
+                path.display()
+            ));
+
             // If system message is empty, show the default
             if config.system_msg.trim().is_empty() {
                 error_msg.push_str("\n\nDefault system message:\n");
                 error_msg.push_str(&Self::default().system_msg);
             }
-            
+
             return Err(anyhow::anyhow!(error_msg));
         }
 
@@ -322,7 +280,10 @@ impl Config {
         if self.default_number_of_choices < 1 {
             errors.push(ValidationError {
                 field: "default_number_of_choices".to_string(),
-                message: format!("Number of choices must be at least 1 (default: {})", default.default_number_of_choices),
+                message: format!(
+                    "Number of choices must be at least 1 (default: {})",
+                    default.default_number_of_choices
+                ),
             });
         }
 
@@ -412,15 +373,14 @@ mod tests {
 model: gpt-5.1
 api_endpoint: https://api.openai.com/v1/chat/completions
 default_number_of_choices: 3
-disable_print_as_stream: false
 disable_auto_update_check: true
 system_msg: "Test message"
 "#;
         let (_file_path, _dir) = create_test_config(config_content);
-        
+
         // Set the home directory to our temp directory for this test
         std::env::set_var("HOME", _dir.path());
-        
+
         let config = Config::load();
         assert!(config.is_ok());
         let config = config.unwrap();
@@ -431,27 +391,30 @@ system_msg: "Test message"
     fn test_load_invalid_yaml() {
         let config_content = "invalid: yaml: content: [";
         let (_file_path, _dir) = create_test_config(config_content);
-        
+
         // Set the home directory to our temp directory for this test
         std::env::set_var("HOME", _dir.path());
-        
+
         let config = Config::load();
-        assert!(config.is_err(), "Expected config loading to fail with invalid YAML");
+        assert!(
+            config.is_err(),
+            "Expected config loading to fail with invalid YAML"
+        );
     }
 
     #[test]
     fn test_load_missing_file_creates_default() {
         let _dir = tempdir().unwrap();
         std::env::set_var("HOME", _dir.path());
-        
+
         // First load should create the file
         let config = Config::load();
         assert!(config.is_ok());
-        
+
         // Verify the file was created
         let config_path = _dir.path().join(".turbocommit.yaml");
         assert!(config_path.exists());
-        
+
         // Verify content matches default
         let content = std::fs::read_to_string(config_path).unwrap();
         let loaded_config: Config = serde_yaml::from_str(&content).unwrap();
@@ -463,10 +426,10 @@ system_msg: "Test message"
     fn test_validation_error_includes_defaults() {
         let mut config = Config::default();
         config.model = model::Model(String::new());
-        
+
         let errors = config.validate().unwrap_err();
         let default = Config::default();
-        
+
         // Find the model error
         let model_error = errors.iter().find(|e| e.field == "model").unwrap();
         assert!(model_error.message.contains(&default.model.0));
@@ -478,16 +441,15 @@ system_msg: "Test message"
 model: gpt-5.1
 api_endpoint: https://api.openai.com/v1/chat/completions
 default_number_of_choices: 3
-disable_print_as_stream: false
 disable_auto_update_check: false
 system_msg: ""
 "#;
         let (_file_path, _dir) = create_test_config(config_content);
         std::env::set_var("HOME", _dir.path());
-        
+
         let error = Config::load().unwrap_err();
         let error_msg = error.to_string();
-        
+
         // Error should contain the default system message
         assert!(error_msg.contains("Default system message:"));
         assert!(error_msg.contains(&Config::default().system_msg));
@@ -498,17 +460,17 @@ system_msg: ""
         let _dir = tempdir().unwrap();
         // Set the home directory to our temp directory for this test
         std::env::set_var("HOME", _dir.path());
-        
+
         // Create a config with some changes
         let mut config = Config::default();
         config.model = model::Model("gpt-4".to_string());
-        
+
         // First save should succeed
         assert!(config.save_if_changed().is_ok());
-        
+
         // Second save with no changes should still be ok
         assert!(config.save_if_changed().is_ok());
-        
+
         // Verify the file was created with correct content
         let config_path = _dir.path().join(".turbocommit.yaml");
         assert!(config_path.exists());
@@ -520,7 +482,10 @@ system_msg: ""
     #[test]
     fn test_default_auto_update_check() {
         let config = Config::default();
-        assert!(!config.disable_auto_update_check, "Auto update check should be enabled by default");
+        assert!(
+            !config.disable_auto_update_check,
+            "Auto update check should be enabled by default"
+        );
     }
 
     #[test]
@@ -529,12 +494,11 @@ system_msg: ""
 model: gpt-5.1
 api_endpoint: https://api.openai.com/v1/chat/completions
 default_number_of_choices: 3
-disable_print_as_stream: false
 disable_auto_update_check: true
 system_msg: "Test message"
 "#;
         let (file_path, _dir) = create_test_config(config_content);
-        
+
         let config = Config::load_from_path(&file_path);
         assert!(config.is_ok());
         let config = config.unwrap();
@@ -547,17 +511,20 @@ system_msg: "Test message"
     fn test_load_from_path_invalid_yaml() {
         let config_content = "invalid: yaml: content: [";
         let (file_path, _dir) = create_test_config(config_content);
-        
+
         let config = Config::load_from_path(&file_path);
         assert!(config.is_err());
-        assert!(config.unwrap_err().to_string().contains("Configuration file parsing error"));
+        assert!(config
+            .unwrap_err()
+            .to_string()
+            .contains("Configuration file parsing error"));
     }
 
     #[test]
     fn test_load_from_path_nonexistent_file() {
         let dir = tempdir().unwrap();
         let nonexistent_path = dir.path().join("nonexistent.yaml");
-        
+
         let config = Config::load_from_path(&nonexistent_path);
         assert!(config.is_err());
     }
@@ -568,17 +535,16 @@ system_msg: "Test message"
 model: ""  # Empty model is invalid
 api_endpoint: not-a-url
 default_number_of_choices: 3
-disable_print_as_stream: false
 disable_auto_update_check: false
 system_msg: "Test message"
 "#;
         let (file_path, _dir) = create_test_config(config_content);
-        
+
         let config = Config::load_from_path(&file_path);
         assert!(config.is_err());
         let err = config.unwrap_err().to_string();
-        assert!(err.contains("model"));  // Should mention empty model error
-        assert!(err.contains("api_endpoint"));  // Should mention invalid URL error
+        assert!(err.contains("model")); // Should mention empty model error
+        assert!(err.contains("api_endpoint")); // Should mention invalid URL error
     }
 
     #[test]
@@ -587,16 +553,15 @@ system_msg: "Test message"
 model: "gpt-5.1"
 api_endpoint: "https://api.openai.com/v1/chat/completions"
 default_number_of_choices: 3
-disable_print_as_stream: false
 disable_auto_update_check: false
 system_msg: ""
 "#;
         let (file_path, _dir) = create_test_config(config_content);
-        
+
         let config = Config::load_from_path(&file_path);
         assert!(config.is_err());
         let err = config.unwrap_err().to_string();
-        assert!(err.contains("system_msg"));  // Should mention system message error
-        assert!(err.contains("Default system message:"));  // Should show default message
+        assert!(err.contains("system_msg")); // Should mention system message error
+        assert!(err.contains("Default system message:")); // Should show default message
     }
 }
