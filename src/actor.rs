@@ -1,4 +1,4 @@
-use std::process;
+use std::{process, time::Duration};
 
 use colored::Colorize;
 use crossterm::execute;
@@ -43,6 +43,7 @@ impl Actor {
         &self,
         suggestions: &[openai::CommitSuggestion],
         usage: Option<&openai::Usage>,
+        duration: Duration,
     ) {
         if suggestions.is_empty() {
             return;
@@ -64,6 +65,11 @@ impl Actor {
                 util::format_token_count(self.used_tokens).purple()
             );
         }
+        println!(
+            "{} {}",
+            "Time:".bright_black(),
+            format!("{:.1}s", duration.as_secs_f32()).purple()
+        );
 
         for (i, suggestion) in suggestions.iter().enumerate() {
             println!(
@@ -178,7 +184,7 @@ impl Actor {
                     "success: generated {} suggestions",
                     result.suggestions.len()
                 ));
-                self.print_suggestions(&result.suggestions, result.usage.as_ref());
+                self.print_suggestions(&result.suggestions, result.usage.as_ref(), result.duration);
                 Ok(result)
             }
             Err(e) => {
@@ -301,6 +307,12 @@ impl Actor {
                         println!("{}", "No revision suggestions produced".yellow());
                         continue;
                     }
+
+                    self.print_suggestions(
+                        &completion.suggestions,
+                        completion.usage.as_ref(),
+                        completion.duration,
+                    );
 
                     message = match util::choose_message(revision_choices) {
                         Some(message) => message,

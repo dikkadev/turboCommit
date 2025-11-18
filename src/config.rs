@@ -62,6 +62,7 @@ impl Default for Config {
 - Each suggestion object must contain:
   - `title`: the conventional commit header (`<type>[optional scope][!]: <description>`)
   - `body`: optional string (or null) containing a single concise paragraph explaining the WHY behind the change
+- Always emit both keys; set `body` to `null` explicitly when no added context is needed
 - Never include Markdown, bullet lists, or explanatory prose outside of the structured fields
 
 # COMMIT PHILOSOPHY
