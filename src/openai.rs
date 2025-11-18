@@ -3,9 +3,12 @@
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{fmt, process};
+use std::{
+    fmt, process,
+    time::{Duration, Instant},
+};
 
-use crate::debug_log::DebugLogger;
+use crate::{debug_log::DebugLogger, spinner};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "lowercase")]
@@ -165,15 +168,15 @@ impl ResponseFormat {
                                 "properties": {
                                     "title": {
                                         "type": "string",
-                        "description": "Conventional commit title (<type>(scope?): description)",
+                                        "description": "Conventional commit title (<type>(scope?): description)",
                                         "minLength": 1
                                     },
                                     "body": {
                                         "type": ["string", "null"],
-                                        "description": "Optional conventional commit body paragraph focusing on motivation"
+                                        "description": "Optional conventional commit body paragraph focusing on motivation (use null when not needed)"
                                     }
                                 },
-                                "required": ["title"]
+                                "required": ["title", "body"]
                             }
                         }
                     },
@@ -220,16 +223,41 @@ impl Request {
         debug_logger: &mut DebugLogger,
     ) -> anyhow::Result<CompletionResult> {
         let client = reqwest::Client::new();
-        let response = client
+        let mut spinner_handle = spinner::Spinner::start("Asking AI...".to_string());
+        let request_start = Instant::now();
+        let response = match client
             .post(&api_endpoint)
             .header("Content-Type", "application/json")
             .bearer_auth(&api_key)
             .json(self)
             .send()
-            .await?;
+            .await
+        {
+            Ok(resp) => resp,
+            Err(err) => {
+                if let Some(spinner) = spinner_handle.take() {
+                    spinner.stop().await;
+                }
+                return Err(err.into());
+            }
+        };
 
         let status = response.status();
-        let body = response.text().await?;
+        let body = match response.text().await {
+            Ok(body) => body,
+            Err(err) => {
+                if let Some(spinner) = spinner_handle.take() {
+                    spinner.stop().await;
+                }
+                return Err(err.into());
+            }
+        };
+
+        if let Some(spinner) = spinner_handle.take() {
+            spinner.stop().await;
+        }
+
+        let duration = request_start.elapsed();
 
         if !status.is_success() {
             let error_details = match serde_json::from_str::<ErrorRoot>(&body) {
@@ -310,11 +338,16 @@ impl Request {
                 "  Suggestions returned: {}",
                 envelope.suggestions.len().to_string().purple()
             );
+            println!(
+                "  Duration: {}",
+                format!("{:.1}s", duration.as_secs_f32()).purple()
+            );
         }
 
         Ok(CompletionResult {
             suggestions: envelope.suggestions,
             usage: completion.usage,
+            duration,
         })
     }
 }
@@ -323,6 +356,7 @@ impl Request {
 pub struct CompletionResult {
     pub suggestions: Vec<CommitSuggestion>,
     pub usage: Option<Usage>,
+    pub duration: Duration,
 }
 
 #[derive(Debug, Deserialize)]

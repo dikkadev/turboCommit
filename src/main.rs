@@ -14,6 +14,7 @@ mod git;
 mod jj;
 mod model;
 mod openai;
+mod spinner;
 mod util;
 
 #[tokio::main]

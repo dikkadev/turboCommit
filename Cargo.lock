@@ -3099,6 +3099,7 @@ name = "turbocommit"
 version = "2.2.1"
 dependencies = [
  "anyhow",
+ "atty",
  "colored",
  "crates_io_api",
  "crossterm 0.26.1",
