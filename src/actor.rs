@@ -52,24 +52,23 @@ impl Actor {
         println!("\n{}", "Generated Commit Messages:".blue().bold());
         if let Some(usage) = usage {
             println!(
-                "{} {} in, {} out (total: {})",
+                "{} {} in, {} out (total: {}) | {} {}",
                 "Tokens:".bright_black(),
                 util::format_token_count(usage.prompt_tokens).purple(),
                 util::format_token_count(usage.completion_tokens).purple(),
                 util::format_token_count(usage.total_tokens).purple(),
+                "Time:".bright_black(),
+                format!("{:.1}s", duration.as_secs_f32()).purple()
             );
         } else {
             println!(
-                "{} {} in (model usage unavailable)",
+                "{} {} in (model usage unavailable) | {} {}",
                 "Tokens:".bright_black(),
-                util::format_token_count(self.used_tokens).purple()
+                util::format_token_count(self.used_tokens).purple(),
+                "Time:".bright_black(),
+                format!("{:.1}s", duration.as_secs_f32()).purple()
             );
         }
-        println!(
-            "{} {}",
-            "Time:".bright_black(),
-            format!("{:.1}s", duration.as_secs_f32()).purple()
-        );
 
         for (i, suggestion) in suggestions.iter().enumerate() {
             println!(

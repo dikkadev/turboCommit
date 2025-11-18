@@ -46,8 +46,8 @@ impl Spinner {
                     _ = ticker.tick() => {
                         let emoji = CLOCKS[idx % CLOCKS.len()];
                         let elapsed = start.elapsed().as_secs_f32();
-                        let timer_text = format!("{:.1}s", elapsed).bright_black();
-                        let display = format!("{emoji} {label} {timer_text}");
+                        let timer_text = format!("({:.1}s)", elapsed).bright_black();
+                        let display = format!("{emoji} {timer_text} {label}");
                         let _ = write!(stdout, "\r{display}\x1b[K");
                         let _ = stdout.flush();
                         idx = (idx + 1) % CLOCKS.len();
