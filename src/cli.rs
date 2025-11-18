@@ -9,7 +9,6 @@ use std::{cmp, env, process};
 pub struct Options {
     pub n: i32,
     pub msg: String,
-    pub print_once: bool,
     pub model: model::Model,
     pub auto_commmit: bool,
     pub check_version_only: bool,
@@ -35,7 +34,6 @@ impl From<&Config> for Options {
         Self {
             n: config.default_number_of_choices,
             msg: String::new(),
-            print_once: config.disable_print_as_stream,
             model: config.model.clone(),
             auto_commmit: false,
             check_version_only: false,
@@ -83,9 +81,6 @@ impl Options {
                         );
                     }
                 }
-                "-p" | "--print-once" => {
-                    opts.print_once = true;
-                }
                 "-m" | "--model" => {
                     if let Some(model) = iter.next() {
                         opts.model = match model::Model::from_str(&model) {
@@ -104,7 +99,6 @@ impl Options {
                 "-a" | "--auto-commit" => {
                     opts.auto_commmit = true;
                     opts.n = 1;
-                    opts.print_once = true;
                 }
                 "--amend" => {
                     opts.amend = true;
@@ -167,13 +161,11 @@ impl Options {
                 }
                 "-d" | "--debug" => {
                     opts.debug = true;
-                    opts.print_once = true;
                 }
                 "--debug-file" => {
                     if let Some(path) = iter.next() {
                         opts.debug_file = Some(path);
                         opts.debug = true;
-                        opts.print_once = true;
                     }
                 }
                 "--debug-context" => {
@@ -238,13 +230,20 @@ fn help() {
     println!("{}", " \\___/\\____/_/ /_/ /_/_/ /_/ /_/_/\\__/".green());
 
     println!("\nUsage: turbocommit [options] [message]\n");
-    println!("{}", "NOTE: turboCommit now exclusively uses GPT-5.1 models".yellow().bold());
-    println!("{}\n", "Only gpt-5.1, gpt-5.1-codex, and gpt-5.1-codex-mini are supported".bright_black());
+    println!(
+        "{}",
+        "NOTE: turboCommit now exclusively uses GPT-5.1 models"
+            .yellow()
+            .bold()
+    );
+    println!(
+        "{}\n",
+        "Only gpt-5.1, gpt-5.1-codex, and gpt-5.1-codex-mini are supported".bright_black()
+    );
     println!("Options:");
     println!("  -n <n>   Number of choices to generate (default: 3)\n");
     println!("  -m <m>   Model to use (must be a GPT-5.1 model)\n  --model <m>");
     println!("           Examples: gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-mini\n");
-    println!("  -p       Will not print tokens as they are generated.\n  --print-once \n");
     println!("  -a, --auto-commit  Automatically generate and commit a single message\n");
     println!("  --amend  Amend the last commit with the generated message\n");
     println!("  --check-version  Check for updates and exit\n");
@@ -273,10 +272,15 @@ fn help() {
         "\nThe system message is about ~{} tokens long",
         format!(
             "{}",
-            count_token(&crate::config::Config::load().unwrap_or_else(|e| {
-                println!("{}", format!("Error loading config: {}", e).red());
-                process::exit(1);
-            }).system_msg).unwrap_or(0)
+            count_token(
+                &crate::config::Config::load()
+                    .unwrap_or_else(|e| {
+                        println!("{}", format!("Error loading config: {}", e).red());
+                        process::exit(1);
+                    })
+                    .system_msg
+            )
+            .unwrap_or(0)
         )
         .green()
     );
@@ -294,7 +298,6 @@ mod tests {
         let options = Options::from(&config);
 
         assert_eq!(options.n, config.default_number_of_choices);
-        assert_eq!(options.print_once, config.disable_print_as_stream);
         assert_eq!(options.model, config.model);
         assert_eq!(options.reasoning_effort, Some(config.reasoning_effort));
         assert_eq!(options.verbosity, Some(config.verbosity));
@@ -307,7 +310,6 @@ mod tests {
             "turbocommit",
             "-n",
             "3",
-            "--print-once",
             "--model",
             "gpt-5.1",
             "--reasoning-effort",
@@ -321,7 +323,6 @@ mod tests {
         let options = Options::new(args.into_iter(), &config);
 
         assert_eq!(options.n, 3);
-        assert_eq!(options.print_once, true);
         assert_eq!(options.model.0, "gpt-5.1");
         assert_eq!(options.reasoning_effort, Some("medium".to_string()));
         assert_eq!(options.verbosity, Some("high".to_string()));
@@ -331,11 +332,7 @@ mod tests {
     #[test]
     fn test_uncommon_reasoning_effort() {
         let config = Config::default();
-        let args = vec![
-            "turbocommit",
-            "--reasoning-effort",
-            "very-high",
-        ];
+        let args = vec!["turbocommit", "--reasoning-effort", "very-high"];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
@@ -345,60 +342,40 @@ mod tests {
     #[test]
     fn test_debug_mode() {
         let config = Config::default();
-        let args = vec![
-            "turbocommit",
-            "-d",
-            "--model",
-            "gpt-5.1-codex-mini",
-        ];
+        let args = vec!["turbocommit", "-d", "--model", "gpt-5.1-codex-mini"];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
         assert!(options.debug);
-        assert!(options.print_once); // Debug mode forces print_once
         assert_eq!(options.model.0, "gpt-5.1-codex-mini");
     }
 
     #[test]
     fn test_debug_file_options() {
         let config = Config::default();
-        
+
         // Test debug file to a path
-        let args = vec![
-            "turbocommit",
-            "--debug-file",
-            "debug.log",
-        ];
+        let args = vec!["turbocommit", "--debug-file", "debug.log"];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
-        assert!(options.debug);  // Debug mode should be enabled
-        assert!(options.print_once);  // Should force print_once
+        assert!(options.debug); // Debug mode should be enabled
         assert_eq!(options.debug_file, Some("debug.log".to_string()));
 
         // Test debug file to stdout with "-"
-        let args = vec![
-            "turbocommit",
-            "--debug-file",
-            "-",
-        ];
+        let args = vec!["turbocommit", "--debug-file", "-"];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
         assert!(options.debug);
-        assert!(options.print_once);
         assert_eq!(options.debug_file, Some("-".to_string()));
 
         // Test debug mode without file
-        let args = vec![
-            "turbocommit",
-            "-d",
-        ];
+        let args = vec!["turbocommit", "-d"];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
         assert!(options.debug);
-        assert!(options.print_once);
         assert_eq!(options.debug_file, None);
     }
 
@@ -422,7 +399,7 @@ mod tests {
     #[test]
     fn test_verbosity_option() {
         let config = Config::default();
-        
+
         // Test low verbosity
         let args = vec![
             "turbocommit",

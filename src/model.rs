@@ -10,7 +10,7 @@ impl FromStr for Model {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Only allow GPT-5.1 specific models
         const ALLOWED_MODELS: &[&str] = &["gpt-5.1", "gpt-5.1-codex", "gpt-5.1-codex-mini"];
-        
+
         if !ALLOWED_MODELS.contains(&s) {
             return Err(format!(
                 "Invalid model '{}'. Only GPT-5.1 models are supported: gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-mini",
@@ -66,7 +66,10 @@ mod tests {
     fn test_gpt51_models_context_sizes() {
         assert_eq!(Model("gpt-5.1".to_string()).context_size(), 200000);
         assert_eq!(Model("gpt-5.1-codex".to_string()).context_size(), 200000);
-        assert_eq!(Model("gpt-5.1-codex-mini".to_string()).context_size(), 128000);
+        assert_eq!(
+            Model("gpt-5.1-codex-mini".to_string()).context_size(),
+            128000
+        );
     }
 
     #[test]
@@ -75,7 +78,7 @@ mod tests {
         assert!(Model::from_str("gpt-5.1").is_ok());
         assert!(Model::from_str("gpt-5.1-codex").is_ok());
         assert!(Model::from_str("gpt-5.1-codex-mini").is_ok());
-        
+
         // All other models should be rejected (including generic gpt-5.x)
         assert!(Model::from_str("gpt-5").is_err());
         assert!(Model::from_str("gpt-5-nano").is_err());
@@ -93,7 +96,7 @@ mod tests {
         let err = Model::from_str("gpt-4").unwrap_err();
         assert!(err.contains("gpt-4"));
         assert!(err.contains("5.1"));
-        
+
         // Test that even gpt-5 variants are rejected
         let err = Model::from_str("gpt-5").unwrap_err();
         assert!(err.contains("gpt-5"));

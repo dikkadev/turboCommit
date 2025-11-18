@@ -3,11 +3,11 @@ use std::process;
 use colored::Colorize;
 use crossterm::execute;
 use crossterm::style::Print;
-use inquire::Select;
 use edit;
+use inquire::Select;
 
 use crate::cli::Options;
-use crate::{git, jj, openai, util, debug_log::DebugLogger};
+use crate::{debug_log::DebugLogger, git, jj, openai, util};
 
 pub struct Actor {
     messages: Vec<openai::Message>,
@@ -20,7 +20,12 @@ pub struct Actor {
 }
 
 impl Actor {
-    pub fn new(options: Options, api_key: String, api_endpoint: String, vcs_type: jj::VcsType) -> Self {
+    pub fn new(
+        options: Options,
+        api_key: String,
+        api_endpoint: String,
+        vcs_type: jj::VcsType,
+    ) -> Self {
         // Get debug_file before moving options
         let debug_file = options.debug_file.clone();
         Self {
@@ -34,11 +39,48 @@ impl Actor {
         }
     }
 
+    fn print_suggestions(
+        &self,
+        suggestions: &[openai::CommitSuggestion],
+        usage: Option<&openai::Usage>,
+    ) {
+        if suggestions.is_empty() {
+            return;
+        }
+
+        println!("\n{}", "Generated Commit Messages:".blue().bold());
+        if let Some(usage) = usage {
+            println!(
+                "{} {} in, {} out (total: {})",
+                "Tokens:".bright_black(),
+                util::format_token_count(usage.prompt_tokens).purple(),
+                util::format_token_count(usage.completion_tokens).purple(),
+                util::format_token_count(usage.total_tokens).purple(),
+            );
+        } else {
+            println!(
+                "{} {} in (model usage unavailable)",
+                "Tokens:".bright_black(),
+                util::format_token_count(self.used_tokens).purple()
+            );
+        }
+
+        for (i, suggestion) in suggestions.iter().enumerate() {
+            println!(
+                "[{}] {}\n{}\n",
+                format!("{i}").purple(),
+                "=".repeat(77 - i.to_string().len()),
+                suggestion.as_commit_message()
+            );
+        }
+    }
+
     pub fn add_message(&mut self, message: openai::Message) {
         // Log message content if debug_context is enabled
         if self.options.debug_context {
             println!("\n{}", "=== Message to AI ===".blue().bold());
-            println!("{}: {}", 
+            println!(
+                "{}: {}",
                 format!("{:?}", message.role).purple().bold(),
                 message.content.bright_black()
             );
@@ -47,13 +89,12 @@ impl Actor {
         self.messages.push(message);
     }
 
-    async fn ask(&mut self) -> anyhow::Result<Vec<String>> {
-        // Always use n=1 for now as GPT-5.1 works best with single generations
-        let n = 1;
+    async fn ask(&mut self) -> anyhow::Result<openai::CompletionResult> {
+        let suggestion_count = self.options.n.max(1) as usize;
         let mut request = openai::Request::new(
             self.options.model.clone().to_string(),
             self.messages.clone(),
-            n,
+            suggestion_count,
         );
 
         // Add reasoning effort (default from config or CLI override)
@@ -74,7 +115,10 @@ impl Actor {
         let info = format!(
             "model={}, effort={}, verbosity={}, messages={}, tokens={}",
             self.options.model.0,
-            self.options.reasoning_effort.as_deref().unwrap_or("default"),
+            self.options
+                .reasoning_effort
+                .as_deref()
+                .unwrap_or("default"),
             self.options.verbosity.as_deref().unwrap_or("default"),
             self.messages.len(),
             self.used_tokens
@@ -84,23 +128,44 @@ impl Actor {
         // Show useful info in debug mode
         if self.options.debug && self.options.debug_file.is_none() {
             println!("\n{}", "=== Request Info ===".blue().bold());
-            println!("  {}: {}", "Model".bright_black(), self.options.model.0.purple());
-            println!("  {}: {}", 
+            println!(
+                "  {}: {}",
+                "Model".bright_black(),
+                self.options.model.0.purple()
+            );
+            println!(
+                "  {}: {}",
                 "Reasoning Effort".bright_black(),
-                self.options.reasoning_effort.as_deref().unwrap_or("default").purple()
+                self.options
+                    .reasoning_effort
+                    .as_deref()
+                    .unwrap_or("default")
+                    .purple()
             );
-            println!("  {}: {}", 
+            println!(
+                "  {}: {}",
                 "Verbosity".bright_black(),
-                self.options.verbosity.as_deref().unwrap_or("default").purple()
+                self.options
+                    .verbosity
+                    .as_deref()
+                    .unwrap_or("default")
+                    .purple()
             );
-            println!("  {}: {}", "Messages".bright_black(), self.messages.len().to_string().purple());
-            println!("  {}: {}", "Input Tokens".bright_black(), self.used_tokens.to_string().purple());
+            println!(
+                "  {}: {}",
+                "Messages".bright_black(),
+                self.messages.len().to_string().purple()
+            );
+            println!(
+                "  {}: {}",
+                "Input Tokens".bright_black(),
+                self.used_tokens.to_string().purple()
+            );
         }
 
         match request
             .execute(
                 self.api_key.clone(),
-                self.options.print_once,
                 self.used_tokens,
                 self.api_endpoint.clone(),
                 self.options.debug,
@@ -108,13 +173,13 @@ impl Actor {
             )
             .await
         {
-            Ok(choices) => {
-                // Log successful response
+            Ok(result) => {
                 self.debug_logger.log_response(&format!(
-                    "success: generated {} choices",
-                    choices.len()
+                    "success: generated {} suggestions",
+                    result.suggestions.len()
                 ));
-                Ok(choices)
+                self.print_suggestions(&result.suggestions, result.usage.as_ref());
+                Ok(result)
             }
             Err(e) => {
                 // Log error details
@@ -128,15 +193,19 @@ impl Actor {
         if self.options.debug {
             println!("\n{}", "=== Starting Commit Generation ===".blue().bold());
         }
-        
-        let first_choices = self.ask().await?;
-        
-        if self.options.debug {
-            println!("\n{}", "=== Received Response ===".blue().bold());
-            println!("  Generated {} choice(s)", first_choices.len());
+
+        let suggestions = self.ask().await?.suggestions;
+
+        let formatted_first_choices: Vec<String> = suggestions
+            .iter()
+            .map(openai::CommitSuggestion::as_commit_message)
+            .collect();
+
+        if formatted_first_choices.is_empty() {
+            return Err(anyhow::anyhow!("No commit suggestions were generated"));
         }
-        
-        let mut message = match util::choose_message(first_choices) {
+
+        let mut message = match util::choose_message(formatted_first_choices) {
             Some(message) => message,
             None => {
                 if self.options.debug {
@@ -169,10 +238,21 @@ impl Actor {
                                     process::exit(1);
                                 }
                             };
-                            println!("{} 🎉", if self.options.amend { "Commit message amended!" } else { "Commit successful!" }.purple());
+                            println!(
+                                "{} 🎉",
+                                if self.options.amend {
+                                    "Commit message amended!"
+                                } else {
+                                    "Commit successful!"
+                                }
+                                .purple()
+                            );
                         }
                         jj::VcsType::Jujutsu => {
-                            match jj::set_jj_description(self.options.jj_revision.as_deref(), &message) {
+                            match jj::set_jj_description(
+                                self.options.jj_revision.as_deref(),
+                                &message,
+                            ) {
                                 Ok(_) => {}
                                 Err(e) => {
                                     println!("{e}");
@@ -210,14 +290,19 @@ impl Actor {
                     }
                     self.add_message(openai::Message::user(input));
 
-                    let choices = self.ask().await?;
-                    
-                    if self.options.debug {
-                        println!("\n{}", "=== Received Revised Response ===".blue().bold());
-                        println!("  Generated {} choice(s)", choices.len());
+                    let completion = self.ask().await?;
+                    let revision_choices: Vec<String> = completion
+                        .suggestions
+                        .iter()
+                        .map(openai::CommitSuggestion::as_commit_message)
+                        .collect();
+
+                    if revision_choices.is_empty() {
+                        println!("{}", "No revision suggestions produced".yellow());
+                        continue;
                     }
 
-                    message = match util::choose_message(choices) {
+                    message = match util::choose_message(revision_choices) {
                         Some(message) => message,
                         None => {
                             if self.options.debug {
@@ -240,12 +325,12 @@ impl Actor {
     }
 
     pub async fn auto_commit(&mut self) -> anyhow::Result<String> {
-        let choices = self.ask().await?;
-        if choices.is_empty() {
+        let completion = self.ask().await?;
+        if completion.suggestions.is_empty() {
             return Err(anyhow::anyhow!("No commit message generated"));
         }
-        let message = choices[0].clone();
-        
+        let message = completion.suggestions[0].as_commit_message();
+
         match self.vcs_type {
             jj::VcsType::Git => {
                 git::commit(message.clone(), self.options.amend)?;
@@ -254,7 +339,7 @@ impl Actor {
                 jj::set_jj_description(self.options.jj_revision.as_deref(), &message)?;
             }
         }
-        
+
         Ok(message)
     }
 }

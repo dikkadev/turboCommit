@@ -19,7 +19,7 @@ impl DebugLogger {
                     .truncate(true)
                     .open(Path::new(&path))
                     .ok(),
-                false
+                false,
             ),
             None => (None, false),
         };
@@ -31,9 +31,9 @@ impl DebugLogger {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis();
-        
+
         let log_line = format!("{};{};{}\n", timestamp, category, content);
-        
+
         if self.use_stdout {
             let _ = io::stdout().write_all(log_line.as_bytes());
             let _ = io::stdout().flush();
@@ -70,13 +70,16 @@ mod tests {
     fn test_debug_logger_file() {
         let temp_file = NamedTempFile::new().unwrap();
         let path = temp_file.path().to_str().unwrap().to_string();
-        
+
         let mut logger = DebugLogger::new(Some(path.clone()));
         logger.log_info("test message");
-        
+
         let mut content = String::new();
-        File::open(path).unwrap().read_to_string(&mut content).unwrap();
-        
+        File::open(path)
+            .unwrap()
+            .read_to_string(&mut content)
+            .unwrap();
+
         assert!(content.contains("test message"));
         assert!(content.contains(";info;"));
     }
@@ -86,4 +89,4 @@ mod tests {
         let mut logger = DebugLogger::new(None);
         logger.log_info("test message"); // Should not panic
     }
-} 
+}

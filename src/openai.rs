@@ -1,17 +1,11 @@
 #![allow(dead_code)]
 
 use colored::Colorize;
-use crossterm::cursor::{MoveToColumn, MoveToPreviousLine};
-use crossterm::style::Print;
-use crossterm::terminal::{Clear, ClearType};
-use crossterm::{execute, terminal};
-use futures::StreamExt;
-use reqwest_eventsource::{Event, EventSource};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::{fmt, process};
 
-use crate::animation;
-use crate::util::count_lines;
+use crate::debug_log::DebugLogger;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "lowercase")]
@@ -66,6 +60,33 @@ impl Message {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CommitSuggestion {
+    pub title: String,
+    #[serde(default)]
+    pub body: Option<String>,
+}
+
+impl CommitSuggestion {
+    pub fn as_commit_message(&self) -> String {
+        let title = self.title.trim();
+        match self
+            .body
+            .as_ref()
+            .map(|b| b.trim())
+            .filter(|b| !b.is_empty())
+        {
+            Some(body) => format!("{title}\n\n{body}"),
+            None => title.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CommitSuggestionsEnvelope {
+    pub suggestions: Vec<CommitSuggestion>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ErrorRoot {
@@ -95,133 +116,132 @@ impl fmt::Display for Error {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(untagged)]
-pub enum Request {
-    Standard(StandardRequest),
-    Reasoning(ReasoningRequest),
-}
-
-#[derive(Debug, Serialize)]
-pub struct StandardRequest {
+pub struct Request {
     pub model: String,
     pub messages: Vec<Message>,
-    pub n: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f64>,
-    pub frequency_penalty: f64,
+    #[serde(skip)]
+    suggestion_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<String>,
-    stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<ResponseFormat>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct ReasoningRequest {
-    pub model: String,
-    pub messages: Vec<Message>,
-    pub n: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reasoning_effort: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub verbosity: Option<String>,
-    stream: bool,
+pub struct ResponseFormat {
+    #[serde(rename = "type")]
+    type_field: String,
+    json_schema: JsonSchemaFormat,
+}
+
+#[derive(Debug, Serialize)]
+pub struct JsonSchemaFormat {
+    name: String,
+    strict: bool,
+    schema: Value,
+}
+
+impl ResponseFormat {
+    fn commit_suggestions(suggestion_count: usize) -> Self {
+        let count = suggestion_count.max(1) as u64;
+        Self {
+            type_field: "json_schema".to_string(),
+            json_schema: JsonSchemaFormat {
+                name: "commit_suggestions".to_string(),
+                strict: true,
+                schema: json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "suggestions": {
+                            "type": "array",
+                            "minItems": count,
+                            "maxItems": count,
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                    "title": {
+                                        "type": "string",
+                        "description": "Conventional commit title (<type>(scope?): description)",
+                                        "minLength": 1
+                                    },
+                                    "body": {
+                                        "type": ["string", "null"],
+                                        "description": "Optional conventional commit body paragraph focusing on motivation"
+                                    }
+                                },
+                                "required": ["title"]
+                            }
+                        }
+                    },
+                    "required": ["suggestions"]
+                }),
+            },
+        }
+    }
 }
 
 impl Request {
-    pub fn new(
-        model: String,
-        messages: Vec<Message>,
-        n: i32,
-    ) -> Self {
-        // GPT-5.1 models use ReasoningRequest (no temperature/frequency support)
-        Self::Reasoning(ReasoningRequest {
+    pub fn new(model: String, messages: Vec<Message>, suggestion_count: usize) -> Self {
+        let normalized = suggestion_count.max(1);
+        Self {
             model,
             messages,
-            n,
+            suggestion_count: normalized,
             reasoning_effort: None,
             verbosity: None,
-            stream: true,
-        })
-    }
-
-    pub fn with_reasoning_effort(self, effort: Option<String>) -> Self {
-        match self {
-            Self::Standard(mut req) => {
-                req.reasoning_effort = effort;
-                Self::Standard(req)
-            }
-            Self::Reasoning(mut req) => {
-                req.reasoning_effort = effort;
-                Self::Reasoning(req)
-            }
+            response_format: Some(ResponseFormat::commit_suggestions(normalized)),
         }
     }
 
-    pub fn with_verbosity(self, verbosity: Option<String>) -> Self {
-        match self {
-            Self::Standard(mut req) => {
-                req.verbosity = verbosity;
-                Self::Standard(req)
-            }
-            Self::Reasoning(mut req) => {
-                req.verbosity = verbosity;
-                Self::Reasoning(req)
-            }
-        }
+    pub fn with_reasoning_effort(mut self, effort: Option<String>) -> Self {
+        self.reasoning_effort = effort;
+        self
     }
 
-    fn model(&self) -> &str {
-        match self {
-            Self::Standard(req) => &req.model,
-            Self::Reasoning(req) => &req.model,
-        }
+    pub fn with_verbosity(mut self, verbosity: Option<String>) -> Self {
+        self.verbosity = verbosity;
+        self
     }
 
-    fn n(&self) -> i32 {
-        match self {
-            Self::Standard(req) => req.n,
-            Self::Reasoning(req) => req.n,
-        }
+    pub fn suggestion_count(&self) -> usize {
+        self.suggestion_count
     }
 
     pub async fn execute(
         &self,
         api_key: String,
-        no_animations: bool,
         prompt_tokens: usize,
         api_endpoint: String,
         debug: bool,
-        debug_logger: &mut crate::debug_log::DebugLogger,
-    ) -> anyhow::Result<Vec<String>> {
-        let mut choices = vec![String::new(); self.n() as usize];
-        let json = serde_json::to_string(self)?;
-
-        // First make a regular request to check if it will be accepted
+        debug_logger: &mut DebugLogger,
+    ) -> anyhow::Result<CompletionResult> {
         let client = reqwest::Client::new();
         let response = client
             .post(&api_endpoint)
             .header("Content-Type", "application/json")
             .bearer_auth(&api_key)
-            .body(json.clone())
+            .json(self)
             .send()
             .await?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_body = response.text().await?;
-            
-            // Try to parse as OpenAI error
-            let error_details = match serde_json::from_str::<ErrorRoot>(&error_body) {
+        let status = response.status();
+        let body = response.text().await?;
+
+        if !status.is_success() {
+            let error_details = match serde_json::from_str::<ErrorRoot>(&body) {
                 Ok(error_root) => format!(
                     "OpenAI Error:\n  Type: {}\n  Message: {}\n  Code: {:?}\n  Parameter: {:?}\n\nFull Response:\n{}",
                     error_root.error.type_field,
                     error_root.error.message,
                     error_root.error.code,
                     error_root.error.param,
-                    error_body
+                    body
                 ),
-                Err(_) => format!("Raw Response:\n{}", error_body),
+                Err(_) => format!("Raw Response:\n{}", body),
             };
 
             let error_msg = format!(
@@ -234,213 +254,134 @@ impl Request {
             process::exit(1);
         }
 
-        let loading_ai_animation = animation::start(
-            String::from("Asking AI..."),
-            no_animations || debug,
-            std::io::stdout(),
-        )
-        .await;
+        debug_logger.log_response(&body);
 
-        let request_builder = client
-            .post(api_endpoint.clone())
-            .header("Content-Type", "application/json")
-            .bearer_auth(api_key)
-            .body(json);
+        let completion: ChatCompletionResponse = serde_json::from_str(&body).map_err(|err| {
+            let msg = format!("Failed to parse API response as chat completion JSON: {err}");
+            debug_logger.log_error(&format!("{msg}\nRaw body: {body}"));
+            anyhow::anyhow!(msg)
+        })?;
 
-        let term_width = terminal::size()?.0 as usize;
-        let mut stdout = std::io::stdout();
-        let mut es = EventSource::new(request_builder)?;
-        let mut lines_to_move_up = 0;
-        let mut response_tokens = 0;
+        let choice = completion
+            .choices
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("API response did not include any choices"))?;
 
-        // Only show minimal info in regular debug mode
-        if debug && !no_animations {
-            println!("\n{}", "Request Info:".blue().bold());
-            println!("  Model: {}", self.model().purple());
-            println!("  API: {}", api_endpoint.purple());
-            println!("  Input tokens: {}", prompt_tokens.to_string().purple());
+        let structured_payload = choice
+            .message
+            .into_text()
+            .ok_or_else(|| anyhow::anyhow!("Assistant response did not include textual content"))?;
+
+        let envelope: CommitSuggestionsEnvelope = serde_json::from_str(&structured_payload)
+            .map_err(|err| {
+                let msg = format!("Failed to parse structured suggestions: {err}");
+                debug_logger.log_error(&format!("{msg}\nPayload: {structured_payload}"));
+                anyhow::anyhow!(msg)
+            })?;
+
+        if envelope.suggestions.is_empty() {
+            return Err(anyhow::anyhow!(
+                "Model returned zero commit suggestions; expected at least one"
+            ));
         }
 
-        while let Some(event) = es.next().await {
-            if no_animations || debug {
-                match event {
-                    Ok(Event::Message(message)) => {
-                        if message.data == "[DONE]" {
-                            break;
-                        }
-                        let resp = serde_json::from_str::<Response>(&message.data)
-                            .map_or_else(|_| Response::default(), |r| r);
-                        response_tokens += 1;
-                        for choice in resp.choices {
-                            if let Some(content) = choice.delta.content {
-                                choices[choice.index as usize].push_str(&content);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        // The error string from reqwest_eventsource includes the full response
-                        let error_str = e.to_string();
-                        let error_details = if let Some(error_json) = error_str.strip_prefix("Error response: ") {
-                            // Try to parse as OpenAI error format
-                            match serde_json::from_str::<ErrorRoot>(error_json) {
-                                Ok(error_root) => format!(
-                                    "OpenAI Error:\n  Type: {}\n  Message: {}\n  Code: {:?}\n\nFull Response:\n{}",
-                                    error_root.error.type_field,
-                                    error_root.error.message,
-                                    error_root.error.code,
-                                    error_json
-                                ),
-                                Err(_) => format!("Raw Response:\n{}", error_json)
-                            }
-                        } else {
-                            format!("Error: {}", error_str)
-                        };
-
-                        let error_msg = format!(
-                            "API request failed:\nEndpoint: {}\n\n{}",
-                            api_endpoint, error_details
-                        );
-                        debug_logger.log_error(&error_msg);
-                        println!("{}", "API Error:".red().bold());
-                        println!("{}", error_msg);
-                        process::exit(1);
-                    }
-                    _ => {}
-                }
-            } else {
-                if !loading_ai_animation.is_finished() {
-                    loading_ai_animation.abort();
-                    execute!(
-                        std::io::stdout(),
-                        Clear(ClearType::CurrentLine),
-                        MoveToColumn(0),
-                    )?;
-                    print!("\n\n")
-                }
-                match event {
-                    Ok(Event::Message(message)) => {
-                        if message.data == "[DONE]" {
-                            break;
-                        }
-                        execute!(stdout, MoveToPreviousLine(lines_to_move_up),)?;
-                        lines_to_move_up = 0;
-                        execute!(stdout, Clear(ClearType::FromCursorDown),)?;
-                        let resp = serde_json::from_str::<Response>(&message.data)
-                            .map_or_else(|_| Response::default(), |r| r);
-                        response_tokens += 1;
-                        for choice in resp.choices {
-                            if let Some(content) = choice.delta.content {
-                                choices[choice.index as usize].push_str(&content);
-                            }
-                        }
-                        for (i, choice) in choices.iter().enumerate() {
-                            let outp = format!(
-                                "{}{}\n{}\n",
-                                if i == 0 {
-                                    format!(
-                                        "Tokens used: {} input, {} output\n",
-                                        crate::util::format_token_count(prompt_tokens).purple(),
-                                        crate::util::format_token_count(response_tokens).purple(),
-                                    )
-                                    .bright_black()
-                                } else {
-                                    "".bright_black()
-                                },
-                                format!("[{}]====================", format!("{i}").purple())
-                                    .bright_black(),
-                                choice,
-                            );
-                            print!("{outp}");
-                            lines_to_move_up += count_lines(&outp, term_width) - 1;
-                        }
-                    }
-                    Err(e) => {
-                        println!("{e}");
-                        process::exit(1);
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        if no_animations || debug {
-            if debug {
-                println!("\n{}", "=== API Response ===".blue().bold());
-            }
+        if envelope.suggestions.len() != self.suggestion_count {
             println!(
-                "Tokens: {} in, {} out (total: {})",
-                crate::util::format_token_count(prompt_tokens).purple(),
-                crate::util::format_token_count(response_tokens).purple(),
-                crate::util::format_token_count(prompt_tokens + response_tokens).purple(),
+                "{} {} -> {}",
+                "Warning:".yellow(),
+                "Model returned a different number of suggestions than requested".bright_black(),
+                envelope.suggestions.len()
             );
-            if debug {
-                println!("  Response time: {}ms", "~".to_string().bright_black());
-                println!("  Choices generated: {}", choices.len().to_string().purple());
-            }
-            for (i, choice) in choices.iter().enumerate() {
+        }
+
+        if debug {
+            println!("\n{}", "=== API Response ===".blue().bold());
+            println!("  Model: {}", self.model.purple());
+            println!("  Input tokens: {}", prompt_tokens.to_string().purple());
+            if let Some(usage) = &completion.usage {
                 println!(
-                    "[{}] {}\n{}\n",
-                    format!("{i}").purple(),
-                    "=".repeat(77 - i.to_string().len()),
-                    choice
+                    "  Output tokens: {} (total: {})",
+                    usage.completion_tokens.to_string().purple(),
+                    usage.total_tokens.to_string().purple()
                 );
             }
-        } else {
-            // For regular mode (non-debug), show the final messages nicely formatted
-            // Only show the messages header if we have multiple choices
-            if choices.len() > 1 {
-                println!("\n{}", "Generated Commit Messages:".blue().bold());
-            }
-            // Don't show the messages here if it's a reasoning response (has <think> tag)
-            // as it will be handled by process_response
-            if !choices[0].contains("<think>") {
-                for (i, choice) in choices.iter().enumerate() {
-                    println!(
-                        "[{}] {}\n{}",
-                        format!("{i}").purple(),
-                        "=".repeat(77 - i.to_string().len()),
-                        choice
-                    );
-                }
-            }
+            println!(
+                "  Suggestions returned: {}",
+                envelope.suggestions.len().to_string().purple()
+            );
         }
 
-        execute!(
-            stdout,
-            Print(format!("{}\n", "=======================".bright_black())),
-        )?;
-
-        execute!(
-            stdout,
-            MoveToPreviousLine(lines_to_move_up),
-            Clear(ClearType::FromCursorDown),
-        )?;
-
-        Ok(choices)
+        Ok(CompletionResult {
+            suggestions: envelope.suggestions,
+            usage: completion.usage,
+        })
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct Response {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CompletionResult {
+    pub suggestions: Vec<CommitSuggestion>,
+    pub usage: Option<Usage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatCompletionResponse {
     pub id: String,
     pub object: String,
     pub created: i64,
     pub model: String,
-    pub choices: Vec<Choice>,
+    pub choices: Vec<ChatCompletionChoice>,
     pub usage: Option<Usage>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct Choice {
-    pub index: i64,
-    pub finish_reason: Option<String>,
-    pub delta: Delta,
+#[derive(Debug, Deserialize)]
+struct ChatCompletionChoice {
+    pub index: usize,
+    pub message: ChoiceMessage,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct Delta {
-    pub role: Option<Role>,
-    pub content: Option<String>,
+#[derive(Debug, Deserialize)]
+struct ChoiceMessage {
+    pub role: Role,
+    pub content: MessageContent,
+}
+
+impl ChoiceMessage {
+    fn into_text(self) -> Option<String> {
+        match self.content {
+            MessageContent::Text(s) => Some(s),
+            MessageContent::Array(parts) => {
+                let mut text = String::new();
+                for part in parts {
+                    if part.kind == "output_text" || part.kind == "text" {
+                        if let Some(content) = part.text {
+                            text.push_str(&content);
+                        }
+                    }
+                }
+                if text.is_empty() {
+                    None
+                } else {
+                    Some(text)
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum MessageContent {
+    Text(String),
+    Array(Vec<ContentPart>),
+}
+
+#[derive(Debug, Deserialize)]
+struct ContentPart {
+    #[serde(rename = "type")]
+    kind: String,
+    text: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -470,57 +411,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_gpt51_models_use_reasoning_request() {
-        // GPT-5.1 models use ReasoningRequest (no temperature/frequency support)
-        let request = Request::new(
-            "gpt-5.1".to_string(),
-            vec![Message::user("test".to_string())],
-            1,
-        );
-
-        match request {
-            Request::Reasoning(_) => {
-                // Success - GPT-5.1 models use reasoning request
-            }
-            _ => panic!("Expected ReasoningRequest for GPT-5.1 model"),
-        }
-    }
-
-    #[test]
-    fn test_all_gpt51_variants_use_reasoning_request() {
-        // Test all GPT-5.1 variants use Reasoning request
-        let models = vec!["gpt-5.1", "gpt-5.1-codex", "gpt-5.1-codex-mini"];
-        
-        for model_name in models {
-            let request = Request::new(
-                model_name.to_string(),
-                vec![Message::user("test".to_string())],
-                1,
-            );
-
-            match request {
-                Request::Reasoning(_) => {
-                    // Success - GPT-5.1 models should use Reasoning request
-                }
-                _ => panic!("Expected ReasoningRequest for {} model", model_name),
-            }
-        }
-    }
-
-    #[test]
     fn test_verbosity_with_request() {
         let request = Request::new(
             "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
-        ).with_verbosity(Some("high".to_string()));
+        )
+        .with_verbosity(Some("high".to_string()));
 
-        match request {
-            Request::Reasoning(req) => {
-                assert_eq!(req.verbosity, Some("high".to_string()));
-            }
-            _ => panic!("Expected ReasoningRequest"),
-        }
+        assert_eq!(request.verbosity, Some("high".to_string()));
     }
 
     #[test]
@@ -529,14 +428,10 @@ mod tests {
             "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
-        ).with_reasoning_effort(Some("none".to_string()));
+        )
+        .with_reasoning_effort(Some("none".to_string()));
 
-        match request {
-            Request::Reasoning(req) => {
-                assert_eq!(req.reasoning_effort, Some("none".to_string()));
-            }
-            _ => panic!("Expected ReasoningRequest"),
-        }
+        assert_eq!(request.reasoning_effort, Some("none".to_string()));
     }
 
     #[test]
@@ -548,7 +443,10 @@ mod tests {
         );
 
         let json = serde_json::to_string(&request).expect("Failed to serialize");
-        assert!(!json.contains("\"verbosity\""), "Serialized JSON should not contain 'verbosity' field when it's None");
+        assert!(
+            !json.contains("\"verbosity\""),
+            "Serialized JSON should not contain 'verbosity' field when it's None"
+        );
     }
 
     #[test]
@@ -557,10 +455,35 @@ mod tests {
             "gpt-5.1".to_string(),
             vec![Message::user("test".to_string())],
             1,
-        ).with_verbosity(Some("high".to_string()));
+        )
+        .with_verbosity(Some("high".to_string()));
 
         let json = serde_json::to_string(&request).expect("Failed to serialize");
-        assert!(json.contains("\"verbosity\""), "Serialized JSON should contain 'verbosity' field when it's Some");
-        assert!(json.contains("\"high\""), "Serialized JSON should contain the verbosity value");
+        assert!(
+            json.contains("\"verbosity\""),
+            "Serialized JSON should contain 'verbosity' field when it's Some"
+        );
+        assert!(
+            json.contains("\"high\""),
+            "Serialized JSON should contain the verbosity value"
+        );
+    }
+
+    #[test]
+    fn commit_suggestion_to_message_body_optional() {
+        let suggestion = CommitSuggestion {
+            title: "feat: example".to_string(),
+            body: Some("Explain why".to_string()),
+        };
+        assert_eq!(
+            suggestion.as_commit_message(),
+            "feat: example\n\nExplain why".to_string()
+        );
+
+        let suggestion_no_body = CommitSuggestion {
+            title: "fix: bug".to_string(),
+            body: None,
+        };
+        assert_eq!(suggestion_no_body.as_commit_message(), "fix: bug");
     }
 }
