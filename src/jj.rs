@@ -278,13 +278,21 @@ pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow
                     ..
                 })),
             ) if source_id != target_id || source_exec != target_exec => {
+                // Read and check source content first for efficiency
                 let source_content =
                     read_file_content(repo.store(), path, source_id).block_on()?;
+                if is_binary_content(&source_content) {
+                    diff_result.push_str(&format!(
+                        "Binary file {} modified\n",
+                        path_str
+                    ));
+                    continue;
+                }
+
+                // Only read target if source is not binary
                 let target_content =
                     read_file_content(repo.store(), path, target_id).block_on()?;
-
-                // Skip binary files
-                if is_binary_content(&source_content) || is_binary_content(&target_content) {
+                if is_binary_content(&target_content) {
                     diff_result.push_str(&format!(
                         "Binary file {} modified\n",
                         path_str
@@ -456,13 +464,21 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
                     ..
                 })),
             ) if source_id != target_id || source_exec != target_exec => {
+                // Read and check source content first for efficiency
                 let source_content =
                     read_file_content(repo.store(), path, source_id).block_on()?;
+                if is_binary_content(&source_content) {
+                    diff_result.push_str(&format!(
+                        "Binary file {} modified\n",
+                        path_str
+                    ));
+                    continue;
+                }
+
+                // Only read target if source is not binary
                 let target_content =
                     read_file_content(repo.store(), path, target_id).block_on()?;
-
-                // Skip binary files
-                if is_binary_content(&source_content) || is_binary_content(&target_content) {
+                if is_binary_content(&target_content) {
                     diff_result.push_str(&format!(
                         "Binary file {} modified\n",
                         path_str
