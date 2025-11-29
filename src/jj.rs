@@ -11,6 +11,16 @@ use jj_lib::workspace::Workspace;
 use pollster::FutureExt;
 use tokio::io::AsyncReadExt;
 
+/// Maximum bytes to check for binary content detection
+const BINARY_CHECK_BYTES: usize = 8000;
+
+/// Check if content is binary by looking for null bytes
+/// This is the same heuristic used by git
+fn is_binary_content(content: &[u8]) -> bool {
+    let check_len = content.len().min(BINARY_CHECK_BYTES);
+    content[..check_len].contains(&0)
+}
+
 /// Represents the VCS type being used
 #[derive(Debug, Clone, PartialEq)]
 pub enum VcsType {
@@ -217,23 +227,41 @@ pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow
         match (source_value.as_resolved(), target_value.as_resolved()) {
             // File deleted (exists in parent, absent in current)
             (Some(Some(TreeValue::File { id: source_id, .. })), Some(None)) => {
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str(&format!("deleted file mode 100644\n"));
-                diff_result.push_str(&format!("--- a/{}\n", path_str));
-                diff_result.push_str(&format!("+++ /dev/null\n"));
+                let content = read_file_content(repo.store(), path, source_id).block_on()?;
+                // Skip binary files
+                if is_binary_content(&content) {
+                    diff_result.push_str(&format!(
+                        "Binary file {} deleted\n",
+                        path_str
+                    ));
+                    continue;
+                }
 
-                let content = read_file_content(repo.store(), path, &source_id).block_on()?;
+                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+                diff_result.push_str("deleted file mode 100644\n");
+                diff_result.push_str(&format!("--- a/{}\n", path_str));
+                diff_result.push_str("+++ /dev/null\n");
+
                 diff_result.push_str(&format_deletion(&content));
             }
 
             // File added (absent in parent, exists in current)
             (Some(None), Some(Some(TreeValue::File { id: target_id, .. }))) => {
+                let content = read_file_content(repo.store(), path, target_id).block_on()?;
+                // Skip binary files
+                if is_binary_content(&content) {
+                    diff_result.push_str(&format!(
+                        "Binary file {} added\n",
+                        path_str
+                    ));
+                    continue;
+                }
+
                 diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str(&format!("new file mode 100644\n"));
-                diff_result.push_str(&format!("--- /dev/null\n"));
+                diff_result.push_str("new file mode 100644\n");
+                diff_result.push_str("--- /dev/null\n");
                 diff_result.push_str(&format!("+++ b/{}\n", path_str));
 
-                let content = read_file_content(repo.store(), path, &target_id).block_on()?;
                 diff_result.push_str(&format_addition(&content));
             }
 
@@ -250,6 +278,20 @@ pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow
                     ..
                 })),
             ) if source_id != target_id || source_exec != target_exec => {
+                let source_content =
+                    read_file_content(repo.store(), path, source_id).block_on()?;
+                let target_content =
+                    read_file_content(repo.store(), path, target_id).block_on()?;
+
+                // Skip binary files
+                if is_binary_content(&source_content) || is_binary_content(&target_content) {
+                    diff_result.push_str(&format!(
+                        "Binary file {} modified\n",
+                        path_str
+                    ));
+                    continue;
+                }
+
                 diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
 
                 if source_exec != target_exec {
@@ -265,11 +307,6 @@ pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow
                 diff_result.push_str(&format!("--- a/{}\n", path_str));
                 diff_result.push_str(&format!("+++ b/{}\n", path_str));
 
-                let source_content =
-                    read_file_content(repo.store(), path, &source_id).block_on()?;
-                let target_content =
-                    read_file_content(repo.store(), path, &target_id).block_on()?;
-
                 diff_result.push_str(&format_unified_diff(&source_content, &target_content)?);
             }
 
@@ -283,8 +320,8 @@ pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow
                 diff_result.push_str(&format!("+++ b/{}\n", path_str));
                 diff_result.push_str("@@ -1 +1 @@\n");
 
-                let source_target = read_symlink(repo.store(), path, &source_id).block_on()?;
-                let target_target = read_symlink(repo.store(), path, &target_id).block_on()?;
+                let source_target = read_symlink(repo.store(), path, source_id).block_on()?;
+                let target_target = read_symlink(repo.store(), path, target_id).block_on()?;
                 diff_result.push_str(&format!("-{}\n", source_target));
                 diff_result.push_str(&format!("+{}\n", target_target));
             }
@@ -296,7 +333,7 @@ pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow
                 diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
                 diff_result.push_str(&format!("--- a/{}\n", path_str));
                 diff_result.push_str(&format!("+++ b/{}\n", path_str));
-                diff_result.push_str(&format!("File type changed\n"));
+                diff_result.push_str("File type changed\n");
             }
 
             // No change or unsupported
@@ -368,23 +405,41 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
         match (source_value.as_resolved(), target_value.as_resolved()) {
             // File deleted (exists in parent, absent in current)
             (Some(Some(TreeValue::File { id: source_id, .. })), Some(None)) => {
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str(&format!("deleted file mode 100644\n"));
-                diff_result.push_str(&format!("--- a/{}\n", path_str));
-                diff_result.push_str(&format!("+++ /dev/null\n"));
+                let content = read_file_content(repo.store(), path, source_id).block_on()?;
+                // Skip binary files
+                if is_binary_content(&content) {
+                    diff_result.push_str(&format!(
+                        "Binary file {} deleted\n",
+                        path_str
+                    ));
+                    continue;
+                }
 
-                let content = read_file_content(repo.store(), path, &source_id).block_on()?;
+                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+                diff_result.push_str("deleted file mode 100644\n");
+                diff_result.push_str(&format!("--- a/{}\n", path_str));
+                diff_result.push_str("+++ /dev/null\n");
+
                 diff_result.push_str(&format_deletion(&content));
             }
 
             // File added (absent in parent, exists in current)
             (Some(None), Some(Some(TreeValue::File { id: target_id, .. }))) => {
+                let content = read_file_content(repo.store(), path, target_id).block_on()?;
+                // Skip binary files
+                if is_binary_content(&content) {
+                    diff_result.push_str(&format!(
+                        "Binary file {} added\n",
+                        path_str
+                    ));
+                    continue;
+                }
+
                 diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str(&format!("new file mode 100644\n"));
-                diff_result.push_str(&format!("--- /dev/null\n"));
+                diff_result.push_str("new file mode 100644\n");
+                diff_result.push_str("--- /dev/null\n");
                 diff_result.push_str(&format!("+++ b/{}\n", path_str));
 
-                let content = read_file_content(repo.store(), path, &target_id).block_on()?;
                 diff_result.push_str(&format_addition(&content));
             }
 
@@ -401,6 +456,20 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
                     ..
                 })),
             ) if source_id != target_id || source_exec != target_exec => {
+                let source_content =
+                    read_file_content(repo.store(), path, source_id).block_on()?;
+                let target_content =
+                    read_file_content(repo.store(), path, target_id).block_on()?;
+
+                // Skip binary files
+                if is_binary_content(&source_content) || is_binary_content(&target_content) {
+                    diff_result.push_str(&format!(
+                        "Binary file {} modified\n",
+                        path_str
+                    ));
+                    continue;
+                }
+
                 diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
 
                 if source_exec != target_exec {
@@ -416,11 +485,6 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
                 diff_result.push_str(&format!("--- a/{}\n", path_str));
                 diff_result.push_str(&format!("+++ b/{}\n", path_str));
 
-                let source_content =
-                    read_file_content(repo.store(), path, &source_id).block_on()?;
-                let target_content =
-                    read_file_content(repo.store(), path, &target_id).block_on()?;
-
                 diff_result.push_str(&format_unified_diff(&source_content, &target_content)?);
             }
 
@@ -434,8 +498,8 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
                 diff_result.push_str(&format!("+++ b/{}\n", path_str));
                 diff_result.push_str("@@ -1 +1 @@\n");
 
-                let source_target = read_symlink(repo.store(), path, &source_id).block_on()?;
-                let target_target = read_symlink(repo.store(), path, &target_id).block_on()?;
+                let source_target = read_symlink(repo.store(), path, source_id).block_on()?;
+                let target_target = read_symlink(repo.store(), path, target_id).block_on()?;
                 diff_result.push_str(&format!("-{}\n", source_target));
                 diff_result.push_str(&format!("+{}\n", target_target));
             }
@@ -447,7 +511,7 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
                 diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
                 diff_result.push_str(&format!("--- a/{}\n", path_str));
                 diff_result.push_str(&format!("+++ b/{}\n", path_str));
-                diff_result.push_str(&format!("File type changed\n"));
+                diff_result.push_str("File type changed\n");
             }
 
             // No change or unsupported
@@ -781,4 +845,57 @@ pub fn get_jj_modified_files() -> anyhow::Result<Vec<String>> {
         modified_files.push(path_str.to_string());
     }
     Ok(modified_files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_binary_content_detects_null_bytes() {
+        // Binary content with null byte
+        let binary_content = vec![0x89, 0x50, 0x4E, 0x47, 0x00, 0x0D, 0x0A, 0x1A];
+        assert!(is_binary_content(&binary_content));
+    }
+
+    #[test]
+    fn test_is_binary_content_allows_text() {
+        // Plain text content
+        let text_content = b"Hello, world!\nThis is a text file.\n";
+        assert!(!is_binary_content(text_content));
+    }
+
+    #[test]
+    fn test_is_binary_content_empty() {
+        // Empty content should not be considered binary
+        let empty_content: Vec<u8> = vec![];
+        assert!(!is_binary_content(&empty_content));
+    }
+
+    #[test]
+    fn test_is_binary_content_utf8_text() {
+        // UTF-8 text content with unicode characters
+        let utf8_content = "Hello, 世界! 🌍 Unicode text.".as_bytes();
+        assert!(!is_binary_content(utf8_content));
+    }
+
+    #[test]
+    fn test_is_binary_content_null_in_middle() {
+        // Null byte in the middle of content
+        let mixed_content = vec![0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x00, 0x57, 0x6F, 0x72, 0x6C, 0x64];
+        assert!(is_binary_content(&mixed_content));
+    }
+
+    #[test]
+    fn test_is_binary_content_only_checks_first_8000_bytes() {
+        // Create content with null byte at position 8001 (should not be detected)
+        let mut content = vec![0x41u8; 8001]; // 'A' repeated
+        content[8000] = 0x00; // null byte after first 8000 bytes
+        assert!(!is_binary_content(&content));
+
+        // Create content with null byte at position 7999 (should be detected)
+        let mut content2 = vec![0x41u8; 8000]; // 'A' repeated
+        content2[7999] = 0x00; // null byte within first 8000 bytes
+        assert!(is_binary_content(&content2));
+    }
 }
