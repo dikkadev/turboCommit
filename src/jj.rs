@@ -223,129 +223,8 @@ pub fn get_jj_diff_for_files(revision: Option<&str>, files: &[String]) -> anyhow
         let source_value = &diff.before;
         let target_value = &diff.after;
 
-        // Determine change type and generate appropriate diff
-        match (source_value.as_resolved(), target_value.as_resolved()) {
-            // File deleted (exists in parent, absent in current)
-            (Some(Some(TreeValue::File { id: source_id, .. })), Some(None)) => {
-                let content = read_file_content(repo.store(), path, source_id).block_on()?;
-                // Skip binary files
-                if is_binary_content(&content) {
-                    diff_result.push_str(&format!(
-                        "Binary file {} deleted\n",
-                        path_str
-                    ));
-                    continue;
-                }
-
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str("deleted file mode 100644\n");
-                diff_result.push_str(&format!("--- a/{}\n", path_str));
-                diff_result.push_str("+++ /dev/null\n");
-
-                diff_result.push_str(&format_deletion(&content));
-            }
-
-            // File added (absent in parent, exists in current)
-            (Some(None), Some(Some(TreeValue::File { id: target_id, .. }))) => {
-                let content = read_file_content(repo.store(), path, target_id).block_on()?;
-                // Skip binary files
-                if is_binary_content(&content) {
-                    diff_result.push_str(&format!(
-                        "Binary file {} added\n",
-                        path_str
-                    ));
-                    continue;
-                }
-
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str("new file mode 100644\n");
-                diff_result.push_str("--- /dev/null\n");
-                diff_result.push_str(&format!("+++ b/{}\n", path_str));
-
-                diff_result.push_str(&format_addition(&content));
-            }
-
-            // File modified
-            (
-                Some(Some(TreeValue::File {
-                    id: source_id,
-                    executable: source_exec,
-                    ..
-                })),
-                Some(Some(TreeValue::File {
-                    id: target_id,
-                    executable: target_exec,
-                    ..
-                })),
-            ) if source_id != target_id || source_exec != target_exec => {
-                // Read and check source content first for efficiency
-                let source_content =
-                    read_file_content(repo.store(), path, source_id).block_on()?;
-                if is_binary_content(&source_content) {
-                    diff_result.push_str(&format!(
-                        "Binary file {} modified\n",
-                        path_str
-                    ));
-                    continue;
-                }
-
-                // Only read target if source is not binary
-                let target_content =
-                    read_file_content(repo.store(), path, target_id).block_on()?;
-                if is_binary_content(&target_content) {
-                    diff_result.push_str(&format!(
-                        "Binary file {} modified\n",
-                        path_str
-                    ));
-                    continue;
-                }
-
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-
-                if source_exec != target_exec {
-                    if *target_exec {
-                        diff_result.push_str("old mode 100644\n");
-                        diff_result.push_str("new mode 100755\n");
-                    } else {
-                        diff_result.push_str("old mode 100755\n");
-                        diff_result.push_str("new mode 100644\n");
-                    }
-                }
-
-                diff_result.push_str(&format!("--- a/{}\n", path_str));
-                diff_result.push_str(&format!("+++ b/{}\n", path_str));
-
-                diff_result.push_str(&format_unified_diff(&source_content, &target_content)?);
-            }
-
-            // Symlink changes
-            (
-                Some(Some(TreeValue::Symlink(source_id))),
-                Some(Some(TreeValue::Symlink(target_id))),
-            ) if source_id != target_id => {
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str(&format!("--- a/{}\n", path_str));
-                diff_result.push_str(&format!("+++ b/{}\n", path_str));
-                diff_result.push_str("@@ -1 +1 @@\n");
-
-                let source_target = read_symlink(repo.store(), path, source_id).block_on()?;
-                let target_target = read_symlink(repo.store(), path, target_id).block_on()?;
-                diff_result.push_str(&format!("-{}\n", source_target));
-                diff_result.push_str(&format!("+{}\n", target_target));
-            }
-
-            // File type changes (e.g., file to symlink)
-            (Some(Some(source)), Some(Some(target)))
-                if std::mem::discriminant(source) != std::mem::discriminant(target) =>
-            {
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str(&format!("--- a/{}\n", path_str));
-                diff_result.push_str(&format!("+++ b/{}\n", path_str));
-                diff_result.push_str("File type changed\n");
-            }
-
-            // No change or unsupported
-            _ => {}
+        if let Some(fragment) = format_diff_entry(repo.store(), path, path_str, source_value, target_value)? {
+            diff_result.push_str(&fragment);
         }
     }
 
@@ -409,133 +288,125 @@ pub fn get_jj_diff(revision: Option<&str>) -> anyhow::Result<String> {
         let source_value = &diff.before;
         let target_value = &diff.after;
 
-        // Determine change type and generate appropriate diff
-        match (source_value.as_resolved(), target_value.as_resolved()) {
-            // File deleted (exists in parent, absent in current)
-            (Some(Some(TreeValue::File { id: source_id, .. })), Some(None)) => {
-                let content = read_file_content(repo.store(), path, source_id).block_on()?;
-                // Skip binary files
-                if is_binary_content(&content) {
-                    diff_result.push_str(&format!(
-                        "Binary file {} deleted\n",
-                        path_str
-                    ));
-                    continue;
-                }
-
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str("deleted file mode 100644\n");
-                diff_result.push_str(&format!("--- a/{}\n", path_str));
-                diff_result.push_str("+++ /dev/null\n");
-
-                diff_result.push_str(&format_deletion(&content));
-            }
-
-            // File added (absent in parent, exists in current)
-            (Some(None), Some(Some(TreeValue::File { id: target_id, .. }))) => {
-                let content = read_file_content(repo.store(), path, target_id).block_on()?;
-                // Skip binary files
-                if is_binary_content(&content) {
-                    diff_result.push_str(&format!(
-                        "Binary file {} added\n",
-                        path_str
-                    ));
-                    continue;
-                }
-
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str("new file mode 100644\n");
-                diff_result.push_str("--- /dev/null\n");
-                diff_result.push_str(&format!("+++ b/{}\n", path_str));
-
-                diff_result.push_str(&format_addition(&content));
-            }
-
-            // File modified
-            (
-                Some(Some(TreeValue::File {
-                    id: source_id,
-                    executable: source_exec,
-                    ..
-                })),
-                Some(Some(TreeValue::File {
-                    id: target_id,
-                    executable: target_exec,
-                    ..
-                })),
-            ) if source_id != target_id || source_exec != target_exec => {
-                // Read and check source content first for efficiency
-                let source_content =
-                    read_file_content(repo.store(), path, source_id).block_on()?;
-                if is_binary_content(&source_content) {
-                    diff_result.push_str(&format!(
-                        "Binary file {} modified\n",
-                        path_str
-                    ));
-                    continue;
-                }
-
-                // Only read target if source is not binary
-                let target_content =
-                    read_file_content(repo.store(), path, target_id).block_on()?;
-                if is_binary_content(&target_content) {
-                    diff_result.push_str(&format!(
-                        "Binary file {} modified\n",
-                        path_str
-                    ));
-                    continue;
-                }
-
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-
-                if source_exec != target_exec {
-                    if *target_exec {
-                        diff_result.push_str("old mode 100644\n");
-                        diff_result.push_str("new mode 100755\n");
-                    } else {
-                        diff_result.push_str("old mode 100755\n");
-                        diff_result.push_str("new mode 100644\n");
-                    }
-                }
-
-                diff_result.push_str(&format!("--- a/{}\n", path_str));
-                diff_result.push_str(&format!("+++ b/{}\n", path_str));
-
-                diff_result.push_str(&format_unified_diff(&source_content, &target_content)?);
-            }
-
-            // Symlink changes
-            (
-                Some(Some(TreeValue::Symlink(source_id))),
-                Some(Some(TreeValue::Symlink(target_id))),
-            ) if source_id != target_id => {
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str(&format!("--- a/{}\n", path_str));
-                diff_result.push_str(&format!("+++ b/{}\n", path_str));
-                diff_result.push_str("@@ -1 +1 @@\n");
-
-                let source_target = read_symlink(repo.store(), path, source_id).block_on()?;
-                let target_target = read_symlink(repo.store(), path, target_id).block_on()?;
-                diff_result.push_str(&format!("-{}\n", source_target));
-                diff_result.push_str(&format!("+{}\n", target_target));
-            }
-
-            // File type changes (e.g., file to symlink)
-            (Some(Some(source)), Some(Some(target)))
-                if std::mem::discriminant(source) != std::mem::discriminant(target) =>
-            {
-                diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
-                diff_result.push_str(&format!("--- a/{}\n", path_str));
-                diff_result.push_str(&format!("+++ b/{}\n", path_str));
-                diff_result.push_str("File type changed\n");
-            }
-
-            // No change or unsupported
-            _ => {}
+        if let Some(fragment) = format_diff_entry(repo.store(), path, path_str, source_value, target_value)? {
+            diff_result.push_str(&fragment);
         }
     }
 
     Ok(diff_result)
+}
+
+/// Formats a single diff entry into a unified diff string fragment.
+/// Returns Ok(None) for entries with no change or unsupported types.
+fn format_diff_entry(
+    store: &jj_lib::store::Store,
+    path: &jj_lib::repo_path::RepoPath,
+    path_str: &str,
+    source_value: &jj_lib::merge::MergedTreeValue,
+    target_value: &jj_lib::merge::MergedTreeValue,
+) -> anyhow::Result<Option<String>> {
+    let mut diff_result = String::new();
+
+    match (source_value.as_resolved(), target_value.as_resolved()) {
+        // File deleted (exists in parent, absent in current)
+        (Some(Some(TreeValue::File { id: source_id, .. })), Some(None)) => {
+            let content = read_file_content(store, path, source_id).block_on()?;
+            if is_binary_content(&content) {
+                return Ok(Some(format!("Binary file {} deleted\n", path_str)));
+            }
+
+            diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+            diff_result.push_str("deleted file mode 100644\n");
+            diff_result.push_str(&format!("--- a/{}\n", path_str));
+            diff_result.push_str("+++ /dev/null\n");
+            diff_result.push_str(&format_deletion(&content));
+        }
+
+        // File added (absent in parent, exists in current)
+        (Some(None), Some(Some(TreeValue::File { id: target_id, .. }))) => {
+            let content = read_file_content(store, path, target_id).block_on()?;
+            if is_binary_content(&content) {
+                return Ok(Some(format!("Binary file {} added\n", path_str)));
+            }
+
+            diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+            diff_result.push_str("new file mode 100644\n");
+            diff_result.push_str("--- /dev/null\n");
+            diff_result.push_str(&format!("+++ b/{}\n", path_str));
+            diff_result.push_str(&format_addition(&content));
+        }
+
+        // File modified
+        (
+            Some(Some(TreeValue::File {
+                id: source_id,
+                executable: source_exec,
+                ..
+            })),
+            Some(Some(TreeValue::File {
+                id: target_id,
+                executable: target_exec,
+                ..
+            })),
+        ) if source_id != target_id || source_exec != target_exec => {
+            let source_content = read_file_content(store, path, source_id).block_on()?;
+            if is_binary_content(&source_content) {
+                return Ok(Some(format!("Binary file {} modified\n", path_str)));
+            }
+
+            let target_content = read_file_content(store, path, target_id).block_on()?;
+            if is_binary_content(&target_content) {
+                return Ok(Some(format!("Binary file {} modified\n", path_str)));
+            }
+
+            diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+
+            if source_exec != target_exec {
+                if *target_exec {
+                    diff_result.push_str("old mode 100644\n");
+                    diff_result.push_str("new mode 100755\n");
+                } else {
+                    diff_result.push_str("old mode 100755\n");
+                    diff_result.push_str("new mode 100644\n");
+                }
+            }
+
+            diff_result.push_str(&format!("--- a/{}\n", path_str));
+            diff_result.push_str(&format!("+++ b/{}\n", path_str));
+            diff_result.push_str(&format_unified_diff(&source_content, &target_content)?);
+        }
+
+        // Symlink changes
+        (
+            Some(Some(TreeValue::Symlink(source_id))),
+            Some(Some(TreeValue::Symlink(target_id))),
+        ) if source_id != target_id => {
+            diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+            diff_result.push_str(&format!("--- a/{}\n", path_str));
+            diff_result.push_str(&format!("+++ b/{}\n", path_str));
+            diff_result.push_str("@@ -1 +1 @@\n");
+
+            let source_target = read_symlink(store, path, source_id).block_on()?;
+            let target_target = read_symlink(store, path, target_id).block_on()?;
+            diff_result.push_str(&format!("-{}\n", source_target));
+            diff_result.push_str(&format!("+{}\n", target_target));
+        }
+
+        // File type changes (e.g., file to symlink)
+        (Some(Some(source)), Some(Some(target)))
+            if std::mem::discriminant(source) != std::mem::discriminant(target) =>
+        {
+            diff_result.push_str(&format!("diff --git a/{} b/{}\n", path_str, path_str));
+            diff_result.push_str(&format!("--- a/{}\n", path_str));
+            diff_result.push_str(&format!("+++ b/{}\n", path_str));
+            diff_result.push_str("File type changed\n");
+        }
+
+        // No change or unsupported
+        _ => return Ok(None),
+    }
+
+    Ok(Some(diff_result))
 }
 
 /// Read file content from store
