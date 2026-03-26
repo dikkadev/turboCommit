@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn test_verbosity_with_request() {
         let request = Request::new(
-            "gpt-5.1".to_string(),
+            "gpt-5.4".to_string(),
             vec![Message::user("test".to_string())],
             1,
         )
@@ -459,7 +459,7 @@ mod tests {
     #[test]
     fn test_reasoning_effort_none() {
         let request = Request::new(
-            "gpt-5.1".to_string(),
+            "gpt-5.4".to_string(),
             vec![Message::user("test".to_string())],
             1,
         )
@@ -471,7 +471,7 @@ mod tests {
     #[test]
     fn test_verbosity_serialization_skipped_when_none() {
         let request = Request::new(
-            "gpt-5.1".to_string(),
+            "gpt-5.4".to_string(),
             vec![Message::user("test".to_string())],
             1,
         );
@@ -486,7 +486,7 @@ mod tests {
     #[test]
     fn test_verbosity_serialization_included_when_some() {
         let request = Request::new(
-            "gpt-5.1".to_string(),
+            "gpt-5.4".to_string(),
             vec![Message::user("test".to_string())],
             1,
         )

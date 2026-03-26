@@ -4,24 +4,23 @@
 ![Crates.io](https://img.shields.io/crates/d/turbocommit)
 ![Crates.io](https://img.shields.io/crates/l/turbocommit)
 
-A powerful CLI tool that leverages OpenAI's GPT-5.1 models to generate high-quality, conventional commit messages from your staged changes in Git and Jujutsu (JJ) repositories.
+A CLI tool that uses OpenAI `gpt-5.4` to generate high-quality conventional commit messages from staged changes in Git and Jujutsu (JJ) repositories.
 
-**Version 2.0 now supports both Git and Jujutsu (JJ) version control systems!**
-**Latest update: Exclusively uses GPT-5.1 models with enhanced reasoning and verbosity controls!**
+**Version 3.0 standardizes on GPT-5.4.**
+**Legacy GPT-5.1 and multi-model compatibility paths have been removed.**
 
 ## Features
 
-- 🤖 **GPT-5.1 Powered** - Exclusively uses the latest GPT-5.1 model family (gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-mini)
-- 📝 Generates conventional commit messages that follow best practices
-- 🎯 Interactive selection from multiple commit message suggestions
-- ✏️ Edit messages directly or request AI revisions
-- 🧠 Advanced reasoning mode with configurable effort levels (including 'none' to disable)
-- 🗣️ **Verbosity controls** - Configure output detail level (low, medium, high)
-- 🧱 Structured outputs ensure consistent multi-choice commit suggestions
-- 🔍 Comprehensive debugging capabilities with file or stdout logging
-- 🔄 Auto-update checks to keep you on the latest version
-- 🎨 Beautiful terminal UI with color-coded output
-- ⚙️ Configurable settings via YAML config file
+- `gpt-5.4` only, with no legacy model fallbacks
+- Default system prompt rewritten for GPT-5.4-era instruction following
+- Conventional commit suggestions from staged Git or JJ changes
+- Interactive selection from multiple suggestions
+- Direct edit and AI revision loop before commit
+- Reasoning effort controls: `none`, `low`, `medium`, `high`
+- Verbosity controls: `low`, `medium`, `high`
+- Structured JSON outputs for stable multi-suggestion parsing
+- Debug logging for requests, responses, token usage, and timing
+- YAML configuration via `~/.turbocommit.yaml`
 
 ## Installation
 
@@ -29,206 +28,154 @@ A powerful CLI tool that leverages OpenAI's GPT-5.1 models to generate high-qual
 cargo install turbocommit
 ```
 
-Pro tip: Add an alias to your shell configuration for quicker access:
+Optional shell alias:
+
 ```bash
-# Add to your .bashrc, .zshrc, etc.
 alias tc='turbocommit'
 ```
 
 ## Usage
 
-1. Stage your changes:
+1. Stage your changes.
+
 ```bash
-git add .  # or stage specific files (Git)
+git add .
 ```
 
-2. Generate commit messages:
+2. Generate commit suggestions.
+
 ```bash
-turbocommit  # or 'tc' if you set up the alias
+turbocommit
 ```
 
-After generating commit messages, you can:
-- Select your preferred message from multiple suggestions
-- Edit the message directly before committing
-- Request AI revisions with additional context or requirements
-- Commit the message once you're satisfied
+After generation you can select a suggestion, edit it, ask for revisions, or commit it directly.
 
 ### Options
 
-**Important: turboCommit now only supports GPT-5.1 models (gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-mini)**
+`turboCommit` now supports only `gpt-5.4`.
 
-- `-n <number>` - Number of commit message suggestions to generate (default: 3)
-- `-m <model>` - Specify the GPT-5.1 model to use
-  - Supported: `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`
-- `-e, --reasoning-effort <level>` - Set reasoning effort level (default: low)
-  - Options: `none` (disable reasoning), `low`, `medium`, `high`
-- `-v, --verbosity <level>` - Control output verbosity (default: medium)
-  - Options: `low`, `medium`, `high`
-- `-d, --debug` - Show request/response info and token usage
-- `--debug-file <path>` - Write detailed debug logs to file (use '-' for stdout)
-- `--auto-commit` - Automatically commit with the generated message
-- `--amend` - Amend the last commit with the generated message
-- `--api-key <key>` - Provide API key directly
-- `--api-endpoint <url>` - Custom API endpoint URL
+- `-n <number>`: number of commit message suggestions to generate, default `3`
+- `-m, --model <model>`: model to use, must be `gpt-5.4`
+- `-e, --reasoning-effort <level>`: `none`, `low`, `medium`, `high`
+- `-v, --verbosity <level>`: `low`, `medium`, `high`
+- `-d, --debug`: print request and usage details
+- `--debug-file <path>`: write detailed debug logs to a file, or `-` for stdout
+- `--auto-commit`: commit automatically using the generated message
+- `--amend`: regenerate the last commit message from the last commit diff
+- `--api-key <key>`: provide API key directly
+- `--api-endpoint <url>`: override the API endpoint
+- `-c, --config <path>`: load a non-default config file
+- `-r, --revision <rev>`: select a JJ revision to describe
+- `--rw`: toggle JJ rewrite mode
 
-#### Reasoning Mode
-GPT-5.1 models have built-in reasoning capabilities. You can control the reasoning effort level which affects the depth of analysis:
+### Reasoning
 
-You can control the reasoning effort level:
+`gpt-5.4` supports configurable reasoning effort.
+
 ```bash
-turbocommit -m gpt-5.1                                  # Default reasoning (medium)
-turbocommit --reasoning-effort high -m gpt-5.1          # High reasoning effort
-turbocommit --reasoning-effort low -m gpt-5.1-codex     # Low reasoning effort
-turbocommit --reasoning-effort none -m gpt-5.1          # Disable reasoning features
+turbocommit -m gpt-5.4
+turbocommit --reasoning-effort high -m gpt-5.4
+turbocommit --reasoning-effort none -m gpt-5.4
 ```
 
-#### Verbosity Control
-Control the level of detail in the model's responses:
+### Verbosity
+
 ```bash
-turbocommit --verbosity low -m gpt-5.1-codex-mini       # Concise output
-turbocommit --verbosity medium -m gpt-5.1               # Balanced output (default)
-turbocommit --verbosity high -m gpt-5.1-codex           # Detailed output
+turbocommit --verbosity low -m gpt-5.4
+turbocommit --verbosity medium -m gpt-5.4
+turbocommit --verbosity high -m gpt-5.4
 ```
 
-#### Debugging
-Debug output helps troubleshoot API interactions:
+### Debugging
+
 ```bash
-turbocommit -d  # Basic info to console
-turbocommit --debug-file debug.log  # Detailed logs to file
-turbocommit --debug-file -  # Detailed logs to stdout
+turbocommit -d
+turbocommit --debug-file debug.log
+turbocommit --debug-file -
 ```
 
-The debug logs include:
-- Request details (model, tokens, parameters)
-- API responses and errors
-- Timing information
-- Full request/response JSON (in file mode)
+Debug logs include request parameters, API responses or errors, token counts, and elapsed time.
 
-For more options, run:
-```bash
-turbocommit --help
-```
+## Pricing
+
+The tool is now documented against OpenAI's current GPT-5.4 API pricing.
+
+- `gpt-5.4` input: `$2.50 / 1M tokens`
+- `gpt-5.4` cached input: `$0.25 / 1M tokens`
+- `gpt-5.4` output: `$15.00 / 1M tokens`
+
+Notes:
+
+- `gpt-5.4-pro` exists, but this CLI does not target it.
+- OpenAI documents a 1.05M context window for `gpt-5.4`, with higher pricing for prompts above 272K input tokens.
+- This project continues to use `v1/chat/completions`, which OpenAI documents as supported for `gpt-5.4`.
 
 ## Configuration
 
-turboCommit creates a config file at `~/.turbocommit.yaml` on first run. You can customize:
+`turboCommit` creates `~/.turbocommit.yaml` on first run.
 
-- Default GPT-5.1 model
-- API endpoint
-- Reasoning effort level
-- Verbosity setting
-- Number of suggestions
-- System message prompt
-- Auto-update checks
-- Reasoning mode defaults
-- And more!
+Example:
 
-Example configuration:
 ```yaml
-model: "gpt-5.1"  # Must be a GPT-5.1 model: gpt-5.1, gpt-5.1-codex, or gpt-5.1-codex-mini
+model: "gpt-5.4"
 default_number_of_choices: 3
-reasoning_effort: "low"  # Options: none, low, medium, high
-verbosity: "medium"  # Options: low, medium, high
+reasoning_effort: "low"
+verbosity: "medium"
 disable_auto_update_check: false
 api_endpoint: "https://api.openai.com/v1/chat/completions"
 api_key_env_var: "OPENAI_API_KEY"
 ```
 
+Important:
+
+- `model` must be `gpt-5.4`
+- empty `system_msg` values are rejected and the default prompt is shown in the validation error
+
 ### Multiple Config Files
 
-You can maintain multiple configuration files for different use cases (e.g., different providers or environments) and specify which one to use with the `-c` or `--config` option:
-
 ```bash
-# Use a local config file
 turbocommit -c ./local-config.yaml
-
-# Use a different provider's config
 turbocommit -c ~/.turbocommit-azure.yaml
-
-# Use the default config
-turbocommit  # uses ~/.turbocommit.yaml
+turbocommit
 ```
 
-Each config file follows the same format as shown above. This allows you to easily switch between different configurations without modifying the default config file.
+## Amend Flow
+
+Use `--amend` when you want to improve the last commit message without staged changes.
+
+```bash
+git status
+turbocommit --amend
+turbocommit --amend --auto-commit
+```
+
+Constraints:
+
+- no staged changes when using `--amend`
+- the tool analyzes the previous commit diff only
+
+## Git Hooks and JJ
+
+Recommended workflow:
+
+1. Stage and commit normally.
+2. Fix any hook failures.
+3. Re-stage fixes if needed.
+4. Use `turbocommit --amend` after checks pass if you want a better message.
+
+## Dev Container Test Environment
+
+A disposable Dev Container is included for validating Git and JJ integration without touching real repositories.
+
+```bash
+devcontainer up --workspace-folder .
+devcontainer exec --workspace-folder . bash
+```
 
 ## Contributing
 
-Contributions are welcome! Feel free to open issues and pull requests.
+Issues and pull requests are welcome.
 
 ## License
 
-Licensed under MIT - see the [LICENSE](LICENSE) file for details.
-
-### Using turboCommit with --amend
-
-The `--amend` option allows you to change the commit message of your last commit. This is useful when:
-- You want to improve the message of your last commit
-- You want to fix a typo in your commit message
-- You want to add more context to your commit message
-
-Usage:
-```bash
-# First, make sure you have no staged changes
-git status  # Should show no staged changes
-
-# Then use --amend to improve the last commit's message
-turbocommit --amend  # This will analyze the last commit's changes and suggest a new message
-```
-
-Important Notes:
-- When using `--amend`, you must not have any staged changes
-- The tool will analyze only the changes from your last commit
-- If you want to include new changes in the amended commit:
-  1. Either commit them first normally, then amend that commit
-  2. Or use `git commit --amend` manually to include them
-
-You can also combine this with auto-commit for a quick message update:
-```bash
-turbocommit --amend --auto-commit  # Automatically amend with the first generated message
-```
-
-### Using turboCommit with Git Hooks and JJ
-
-If your project uses Git hooks (e.g., linters, formatters) or JJ workflows, here's how to use turboCommit effectively:
-
-1. Stage and commit your changes normally:
-```bash
-# For Git repositories:
-git add .
-turbocommit
-
-# For JJ repositories:
-turbocommit
-```
-
-2. If hooks fail:
-   - Fix the issues reported by hooks
-   - Stage the fixed files (`git add .`)
-   - Commit again
-
-3. If you want to improve the commit message after all hooks pass:
-```bash
-# Make sure you have no staged changes
-git status
-
-# Then improve the message
-turbocommit --amend  # This will analyze the commit and suggest a better message
-```
-
-This workflow ensures that:
-- Code quality checks run before the commit
-- You can improve the commit message after all checks pass
-- The final commit message is high-quality and descriptive
-
-## Dev Container test environment
-
-A disposable Dev Container is provided to safely develop and validate Git + Jujutsu (jj) integration. It includes the Rust toolchain, git and jj, and automatically prepares two throwaway repos inside the container at `/tmp/testenv/`.
-
-- What it’s for: Run experiments and upcoming integration checks in isolation, without touching real repositories.
-- How to use it:
-  - VS Code/Cursor: Command Palette → "Dev Containers: Reopen in Container".
-  - CLI:
-    ```bash
-    devcontainer up --workspace-folder .
-    devcontainer exec --workspace-folder . bash
-    ```
+Licensed under MIT. See [LICENSE](LICENSE).

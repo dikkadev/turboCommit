@@ -642,16 +642,16 @@ pub fn set_jj_description(revision: Option<&str>, description: &str) -> anyhow::
     // Get author and committer from original commit, or from user settings if not set
     let author = commit.author();
     let committer = commit.committer();
-    
+
     // Check if author/committer are valid (non-empty name and email)
     let needs_author = author.name.is_empty() || author.email.is_empty();
     let needs_committer = committer.name.is_empty() || committer.email.is_empty();
-    
+
     // Get user signature from settings if needed
     let user_signature = if needs_author || needs_committer {
         let user_name = user_settings.user_name().to_string();
         let user_email = user_settings.user_email().to_string();
-        
+
         // Validate that user settings have name and email configured
         if user_name.is_empty() || user_email.is_empty() {
             return Err(anyhow::anyhow!(
@@ -661,7 +661,7 @@ pub fn set_jj_description(revision: Option<&str>, description: &str) -> anyhow::
                  jj config set user.email \"[email protected]\""
             ));
         }
-        
+
         Some(jj_lib::backend::Signature {
             name: user_name,
             email: user_email,
@@ -670,27 +670,27 @@ pub fn set_jj_description(revision: Option<&str>, description: &str) -> anyhow::
     } else {
         None
     };
-    
+
     // Start transaction and rewrite the commit with updated description
     let mut tx = repo.start_transaction();
     // Build and write rewritten commit
     {
         let mut_repo = tx.repo_mut();
         let builder = mut_repo.rewrite_commit(&commit);
-        
+
         // Set author and committer, preserving originals if they exist, otherwise using user settings
         let author_sig = if needs_author {
             user_signature.as_ref().unwrap().clone()
         } else {
             author.clone()
         };
-        
+
         let committer_sig = if needs_committer {
             user_signature.as_ref().unwrap().clone()
         } else {
             committer.clone()
         };
-        
+
         builder
             .set_author(author_sig)
             .set_committer(committer_sig)
