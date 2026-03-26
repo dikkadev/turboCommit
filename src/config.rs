@@ -1,7 +1,7 @@
 use crate::model;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
-use std::process;
+use std::{process, str::FromStr};
 use url::Url;
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            model: model::Model("gpt-5.1".to_string()),
+            model: model::Model("gpt-5.4".to_string()),
             api_endpoint: String::from("https://api.openai.com/v1/chat/completions"),
             api_key_env_var: String::from("OPENAI_API_KEY"),
             default_number_of_choices: 3,
@@ -49,55 +49,76 @@ impl Default for Config {
             reasoning_effort: String::from("low"),
             verbosity: String::from("medium"),
             jj_rewrite_default: false, // Default to overwrite mode
-            system_msg: String::from("You are a specialized AI that generates high-quality conventional commit suggestions from git diffs. Your ONLY purpose is to produce properly formatted commits that follow the exact specification at conventionalcommits.org.
+            system_msg: String::from("<role>
+You generate high-quality conventional commit suggestions from repository diffs.
+Your job is to infer the most useful commit intent and express it clearly, precisely, and compactly.
+</role>
 
-# INPUTS
-- You will receive a git diff of staged files
-- You MAY also receive a line starting with \"Current description:\" that contains the user's own summary/hint
-- Additional user messages may request edits or add requirements
+<inputs>
+- You will receive a staged diff or commit diff.
+- You may receive a line beginning with \"Current description:\" containing the user's intended summary.
+- You may receive follow-up revision instructions from the user.
+</inputs>
 
-# OUTPUT FORMAT (MANDATORY)
-- You MUST respond with JSON that satisfies the provided structured-output schema
-- Populate the `suggestions` array with exactly the requested number of entries
-- Each suggestion object must contain:
-  - `title`: the conventional commit header (`<type>[optional scope][!]: <description>`)
-  - `body`: optional string (or null) containing a single concise paragraph explaining the WHY behind the change
-- Always emit both keys; set `body` to `null` explicitly when no added context is needed
-- Never include Markdown, bullet lists, or explanatory prose outside of the structured fields
+<output_contract>
+- Respond with JSON only.
+- The JSON must satisfy the provided structured-output schema exactly.
+- Return exactly the requested number of suggestions.
+- Each suggestion must contain:
+  - `title`: a conventional commit header
+  - `body`: either a single concise paragraph string or `null`
+- Do not include markdown fences, explanations, bullets, or extra keys.
+</output_contract>
 
-# COMMIT PHILOSOPHY
-- Prioritize WHY the change exists over WHAT code was touched
-- Surface user intent, motivation, and non-obvious implications
-- Operate at a higher abstraction level than the diff itself
+<task_definition>
+For each suggestion, produce the commit message a strong human reviewer would most likely choose after reading the diff.
+Optimize for semantic accuracy, user intent, and usefulness in project history.
+</task_definition>
 
-# VERBOSITY GUIDANCE
-- `verbosity = low`: prefer title-only unless context is critically missing
-- `verbosity = medium`: include a body when it clarifies motivation
-- `verbosity = high`: almost always include a thoughtful body paragraph
+<priority_order>
+1. Follow the user's explicit revision instructions.
+2. Preserve the intent from \"Current description:\" when it is consistent with the diff.
+3. Use the diff to infer the most important motivation and effect of the change.
+4. Prefer the highest-signal interpretation over a literal file-by-file summary.
+</priority_order>
 
-# CONVENTIONAL COMMIT RULES
-1. Types: feat, fix, docs, style, refac, test, build, ci, chore
-2. Scope: optional noun in parentheses describing the impacted area
-3. Breaking changes: add `!` before the colon or include a `BREAKING CHANGE:` footer (in body)
-4. Description: imperative, lowercase start, no trailing period, focus on intent
-5. Body (when present):
-   - Blank line between title and body
-   - Single paragraph centred on motivation and reasoning
-   - Never re-list code changes; explain purpose and impact instead
-6. Trust the \"Current description\" hint unless it contradicts the diff. Rephrase it into proper conventional commit style while preserving the core intent.
+<commit_rules>
+- Use this title shape: `<type>(optional-scope): description`
+- Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `build`, `ci`, `chore`
+- Add `!` only for genuine breaking changes.
+- Keep the description imperative, specific, and without a trailing period.
+- Prefer lowercase at the start unless a proper noun, acronym, or identifier requires otherwise.
+- Use a scope only when it adds meaningful precision.
+- Avoid vague descriptions like `update files`, `improve code`, or `misc changes`.
+</commit_rules>
 
-# EXAMPLES
-- feat(auth): implement OAuth2 login flow
-  Body: Explain why centralized auth improves security/user experience.
-- fix(perf): reduce query latency under load
-  Body: Describe the root cause and why the fix works.
+<body_rules>
+- The body is optional and should explain WHY, not restate the diff.
+- When present, write exactly one compact paragraph.
+- Include motivation, user impact, operational impact, or the reason the change matters.
+- Do not use bullets, numbered lists, or footers unless a breaking change truly requires one.
+- If the title already fully captures the value of a small change, set `body` to `null`.
+</body_rules>
 
-# ADDITIONAL INSTRUCTIONS
-- Always follow the schema; never emit free-form text
-- Respect user edits/revision requests exactly
-- If reasoning effort is `none`, keep responses efficient but still valid
-- If verbosity is `high`, lean into clear, motivating context without rambling
-- Never explain your reasoning or the schema back to the user; just output structured suggestions"),
+<verbosity_policy>
+- `verbosity = low`: prefer `body = null` unless motivation would otherwise be unclear.
+- `verbosity = medium`: include a body when it adds useful context beyond the title.
+- `verbosity = high`: include a body whenever it improves future readability of project history.
+</verbosity_policy>
+
+<reasoning_guidance>
+- Think through the change carefully before writing.
+- Resolve ambiguity using the diff and user-provided intent.
+- If multiple interpretations are plausible, prefer the one that best explains why the change exists.
+- Do not reveal chain-of-thought or analysis. Only return the schema-compliant JSON result.
+</reasoning_guidance>
+
+<quality_bar>
+- Titles should feel deliberate, not generic.
+- Bodies should add signal, not filler.
+- Avoid parroting filenames, function names, or low-level edits unless they are central to intent.
+- The suggestions should be distinct but all defensible.
+</quality_bar>"),
         }
     }
 }
@@ -267,6 +288,11 @@ impl Config {
                 field: "model".to_string(),
                 message: format!("Model cannot be empty (default: {})", default.model.0),
             });
+        } else if let Err(err) = model::Model::from_str(&self.model.0) {
+            errors.push(ValidationError {
+                field: "model".to_string(),
+                message: err,
+            });
         }
 
         // Validate API endpoint
@@ -371,7 +397,7 @@ mod tests {
     #[test]
     fn test_load_valid_config() {
         let config_content = r#"
-model: gpt-5.1
+model: gpt-5.4
 api_endpoint: https://api.openai.com/v1/chat/completions
 default_number_of_choices: 3
 disable_auto_update_check: true
@@ -439,7 +465,7 @@ system_msg: "Test message"
     #[test]
     fn test_empty_system_msg_shows_default() {
         let config_content = r#"
-model: gpt-5.1
+model: gpt-5.4
 api_endpoint: https://api.openai.com/v1/chat/completions
 default_number_of_choices: 3
 disable_auto_update_check: false
@@ -464,7 +490,7 @@ system_msg: ""
 
         // Create a config with some changes
         let mut config = Config::default();
-        config.model = model::Model("gpt-4".to_string());
+        config.model = model::Model("gpt-5.4".to_string());
 
         // First save should succeed
         assert!(config.save_if_changed().is_ok());
@@ -477,7 +503,7 @@ system_msg: ""
         assert!(config_path.exists());
         let content = std::fs::read_to_string(config_path).unwrap();
         let loaded_config: Config = serde_yaml::from_str(&content).unwrap();
-        assert_eq!(loaded_config.model.0, "gpt-4");
+        assert_eq!(loaded_config.model.0, "gpt-5.4");
     }
 
     #[test]
@@ -492,7 +518,7 @@ system_msg: ""
     #[test]
     fn test_load_from_path_valid_config() {
         let config_content = r#"
-model: gpt-5.1
+model: gpt-5.4
 api_endpoint: https://api.openai.com/v1/chat/completions
 default_number_of_choices: 3
 disable_auto_update_check: true
@@ -503,7 +529,7 @@ system_msg: "Test message"
         let config = Config::load_from_path(&file_path);
         assert!(config.is_ok());
         let config = config.unwrap();
-        assert_eq!(config.model.0, "gpt-5.1");
+        assert_eq!(config.model.0, "gpt-5.4");
         assert!(config.disable_auto_update_check);
         assert_eq!(config.system_msg, "Test message");
     }
@@ -549,9 +575,26 @@ system_msg: "Test message"
     }
 
     #[test]
+    fn test_load_from_path_invalid_model() {
+        let config_content = r#"
+model: "gpt-5.4-pro"
+api_endpoint: "https://api.openai.com/v1/chat/completions"
+default_number_of_choices: 3
+disable_auto_update_check: false
+system_msg: "Test message"
+"#;
+        let (file_path, _dir) = create_test_config(config_content);
+
+        let config = Config::load_from_path(&file_path);
+        assert!(config.is_err());
+        let err = config.unwrap_err().to_string();
+        assert!(err.contains("Only gpt-5.4 is supported"));
+    }
+
+    #[test]
     fn test_load_from_path_empty_system_msg() {
         let config_content = r#"
-model: "gpt-5.1"
+model: "gpt-5.4"
 api_endpoint: "https://api.openai.com/v1/chat/completions"
 default_number_of_choices: 3
 disable_auto_update_check: false

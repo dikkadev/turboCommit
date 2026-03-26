@@ -232,18 +232,18 @@ fn help() {
     println!("\nUsage: turbocommit [options] [message]\n");
     println!(
         "{}",
-        "NOTE: turboCommit now exclusively uses GPT-5.1 models"
+        "NOTE: turboCommit now exclusively uses gpt-5.4"
             .yellow()
             .bold()
     );
     println!(
         "{}\n",
-        "Only gpt-5.1, gpt-5.1-codex, and gpt-5.1-codex-mini are supported".bright_black()
+        "No legacy or alternate model variants are supported".bright_black()
     );
     println!("Options:");
     println!("  -n <n>   Number of choices to generate (default: 3)\n");
-    println!("  -m <m>   Model to use (must be a GPT-5.1 model)\n  --model <m>");
-    println!("           Examples: gpt-5.1, gpt-5.1-codex, gpt-5.1-codex-mini\n");
+    println!("  -m <m>   Model to use (must be gpt-5.4)\n  --model <m>");
+    println!("           Example: gpt-5.4\n");
     println!("  -a, --auto-commit  Automatically generate and commit a single message\n");
     println!("  --amend  Amend the last commit with the generated message\n");
     println!("  --check-version  Check for updates and exit\n");
@@ -311,7 +311,7 @@ mod tests {
             "-n",
             "3",
             "--model",
-            "gpt-5.1",
+            "gpt-5.4",
             "--reasoning-effort",
             "medium",
             "--verbosity",
@@ -323,7 +323,7 @@ mod tests {
         let options = Options::new(args.into_iter(), &config);
 
         assert_eq!(options.n, 3);
-        assert_eq!(options.model.0, "gpt-5.1");
+        assert_eq!(options.model.0, "gpt-5.4");
         assert_eq!(options.reasoning_effort, Some("medium".to_string()));
         assert_eq!(options.verbosity, Some("high".to_string()));
         assert_eq!(options.msg, "User Explanation/Instruction: 'test commit'");
@@ -342,12 +342,12 @@ mod tests {
     #[test]
     fn test_debug_mode() {
         let config = Config::default();
-        let args = vec!["turbocommit", "-d", "--model", "gpt-5.1-codex-mini"];
+        let args = vec!["turbocommit", "-d", "--model", "gpt-5.4"];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
         assert!(options.debug);
-        assert_eq!(options.model.0, "gpt-5.1-codex-mini");
+        assert_eq!(options.model.0, "gpt-5.4");
     }
 
     #[test]
@@ -387,13 +387,13 @@ mod tests {
             "--reasoning-effort",
             "none",
             "--model",
-            "gpt-5.1",
+            "gpt-5.4",
         ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
         assert_eq!(options.reasoning_effort, Some("none".to_string()));
-        assert_eq!(options.model.0, "gpt-5.1");
+        assert_eq!(options.model.0, "gpt-5.4");
     }
 
     #[test]
@@ -401,25 +401,13 @@ mod tests {
         let config = Config::default();
 
         // Test low verbosity
-        let args = vec![
-            "turbocommit",
-            "--verbosity",
-            "low",
-            "--model",
-            "gpt-5.1-codex-mini",
-        ];
+        let args = vec!["turbocommit", "--verbosity", "low", "--model", "gpt-5.4"];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
         assert_eq!(options.verbosity, Some("low".to_string()));
 
         // Test high verbosity
-        let args = vec![
-            "turbocommit",
-            "--verbosity",
-            "high",
-            "--model",
-            "gpt-5.1-codex",
-        ];
+        let args = vec!["turbocommit", "--verbosity", "high", "--model", "gpt-5.4"];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
         assert_eq!(options.verbosity, Some("high".to_string()));
@@ -435,14 +423,14 @@ mod tests {
             "-v",
             "low",
             "--model",
-            "gpt-5.1",
+            "gpt-5.4",
         ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
         assert_eq!(options.reasoning_effort, Some("high".to_string()));
         assert_eq!(options.verbosity, Some("low".to_string()));
-        assert_eq!(options.model.0, "gpt-5.1");
+        assert_eq!(options.model.0, "gpt-5.4");
     }
 
     #[test]
