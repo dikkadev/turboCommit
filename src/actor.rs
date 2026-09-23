@@ -345,9 +345,18 @@ impl Actor {
         match self.vcs_type {
             jj::VcsType::Git => {
                 git::commit(message.clone(), self.options.amend)?;
+                println!(
+                    "{}",
+                    if self.options.amend {
+                        "Commit message amended."
+                    } else {
+                        "Commit created."
+                    }
+                );
             }
             jj::VcsType::Jujutsu => {
                 jj::set_jj_description(self.options.jj_revision.as_deref(), &message)?;
+                println!("{}", "JJ description set.");
             }
         }
 

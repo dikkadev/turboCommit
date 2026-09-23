@@ -4,19 +4,16 @@
 ![Crates.io](https://img.shields.io/crates/d/turbocommit)
 ![Crates.io](https://img.shields.io/crates/l/turbocommit)
 
-A CLI tool that uses OpenAI `gpt-5.4` to generate high-quality conventional commit messages from staged changes in Git and Jujutsu (JJ) repositories.
-
-**Version 3.0 standardizes on GPT-5.4.**
-**Legacy GPT-5.1 and multi-model compatibility paths have been removed.**
+A CLI tool that uses the GPT-6 family to write Conventional Commit messages from Git and Jujutsu (JJ) changes. GPT-6 Luna is the default for its speed and low cost; Sol and Astra are available for harder changes.
 
 ## Features
 
-- `gpt-5.4` only, with no legacy model fallbacks
-- Default system prompt rewritten for GPT-5.4-era instruction following
-- Conventional commit suggestions from staged Git or JJ changes
-- Interactive selection from multiple suggestions
-- Direct edit and AI revision loop before commit
-- Reasoning effort controls: `none`, `low`, `medium`, `high`
+- GPT-6 Luna by default, with Sol and Astra available via `--model`
+- One suggestion by default; request more with `-n`
+- Prompt tuned for commit intent, JJ descriptions, and concise output
+- Conventional Commit suggestions from staged Git changes or a JJ revision
+- Interactive review, editing, and revision when `--auto-commit` is not set
+- Reasoning effort controls: `none`, `low`, `medium`, `high`, `xhigh`, `max` (Astra starts at `low`)
 - Verbosity controls: `low`, `medium`, `high`
 - Structured JSON outputs for stable multi-suggestion parsing
 - Debug logging for requests, responses, token usage, and timing
@@ -25,8 +22,10 @@ A CLI tool that uses OpenAI `gpt-5.4` to generate high-quality conventional comm
 ## Installation
 
 ```bash
-cargo install turbocommit
+cargo install --git https://github.com/dikkadev/turboCommit
 ```
+
+For the latest version published to crates.io, use `cargo install turbocommit`. The published release may lag behind the repository.
 
 Optional shell alias:
 
@@ -36,54 +35,60 @@ alias tc='turbocommit'
 
 ## Usage
 
-1. Stage your changes.
+1. For Git, stage your changes. JJ uses the selected revision's changes directly.
 
 ```bash
 git add .
 ```
 
-2. Generate commit suggestions.
+2. Generate one suggestion and review it.
 
 ```bash
 turbocommit
 ```
 
-After generation you can select a suggestion, edit it, ask for revisions, or commit it directly.
+The interactive flow lets you accept, edit, revise, or abort. For the common automatic flow, use `turbocommit --auto-commit`. With Git, it creates a commit; with JJ, it sets the selected revision's description. It always requests one suggestion, regardless of `-n` order.
+
+```bash
+# Describe the current JJ change without prompts
+turbocommit --auto-commit
+
+# Describe a specific JJ revision, using its current description as a hint
+turbocommit --auto-commit --revision <rev> --rw
+```
 
 ### Options
 
-`turboCommit` now supports only `gpt-5.4`.
-
-- `-n <number>`: number of commit message suggestions to generate, default `3`
-- `-m, --model <model>`: model to use, must be `gpt-5.4`
-- `-e, --reasoning-effort <level>`: `none`, `low`, `medium`, `high`
+- `-n <number>`: number of suggestions, default `1` in interactive mode
+- `-m, --model <model>`: `gpt-6-luna` (default), `gpt-6-sol`, or `gpt-6-astra`
+- `-e, --reasoning-effort <level>`: `none`, `low` (default), `medium`, `high`, `xhigh`, `max`; Astra does not support `none`
 - `-v, --verbosity <level>`: `low`, `medium`, `high`
 - `-d, --debug`: print request and usage details
 - `--debug-file <path>`: write detailed debug logs to a file, or `-` for stdout
-- `--auto-commit`: commit automatically using the generated message
-- `--amend`: regenerate the last commit message from the last commit diff
+- `-a, --auto-commit`: write the generated Git commit or JJ description without interactive review
+- `--amend`: regenerate the last Git commit message from its diff
 - `--api-key <key>`: provide API key directly
 - `--api-endpoint <url>`: override the API endpoint
 - `-c, --config <path>`: load a non-default config file
 - `-r, --revision <rev>`: select a JJ revision to describe
-- `--rw`: toggle JJ rewrite mode
+- `--rw`: toggle JJ rewrite mode, which passes the current description to the model as context
 
 ### Reasoning
 
-`gpt-5.4` supports configurable reasoning effort.
+Reasoning effort defaults to `low` for fast commit generation. Use a higher level for ambiguous or broad diffs.
 
 ```bash
-turbocommit -m gpt-5.4
-turbocommit --reasoning-effort high -m gpt-5.4
-turbocommit --reasoning-effort none -m gpt-5.4
+turbocommit --auto-commit
+turbocommit --reasoning-effort high -m gpt-6-sol
+turbocommit --reasoning-effort none -m gpt-6-luna
 ```
 
 ### Verbosity
 
 ```bash
-turbocommit --verbosity low -m gpt-5.4
-turbocommit --verbosity medium -m gpt-5.4
-turbocommit --verbosity high -m gpt-5.4
+turbocommit --verbosity low
+turbocommit --verbosity medium
+turbocommit --verbosity high
 ```
 
 ### Debugging
@@ -98,17 +103,13 @@ Debug logs include request parameters, API responses or errors, token counts, an
 
 ## Pricing
 
-The tool is now documented against OpenAI's current GPT-5.4 API pricing.
+Standard [GPT-6 Luna API pricing](https://developers.openai.com/api/docs/models/gpt-6-luna) per 1M text tokens:
 
-- `gpt-5.4` input: `$2.50 / 1M tokens`
-- `gpt-5.4` cached input: `$0.25 / 1M tokens`
-- `gpt-5.4` output: `$15.00 / 1M tokens`
+- Input: $0.10
+- Cached input: $0.01
+- Output: $0.50
 
-Notes:
-
-- `gpt-5.4-pro` exists, but this CLI does not target it.
-- OpenAI documents a 1.05M context window for `gpt-5.4`, with higher pricing for prompts above 272K input tokens.
-- This project continues to use `v1/chat/completions`, which OpenAI documents as supported for `gpt-5.4`.
+All three supported models have a 1.05M token context window. OpenAI charges higher rates for prompts above 272K input tokens; see the [model pages](https://developers.openai.com/api/docs/models). The CLI uses `v1/chat/completions`, which supports these models and the current structured JSON response format. [OpenAI recommends Responses for new text generation applications](https://developers.openai.com/api/docs/guides/text); this CLI keeps its working Chat Completions integration and configurable compatible endpoint.
 
 ## Configuration
 
@@ -117,8 +118,8 @@ Notes:
 Example:
 
 ```yaml
-model: "gpt-5.4"
-default_number_of_choices: 3
+model: "gpt-6-luna"
+default_number_of_choices: 1
 reasoning_effort: "low"
 verbosity: "medium"
 disable_auto_update_check: false
@@ -126,10 +127,7 @@ api_endpoint: "https://api.openai.com/v1/chat/completions"
 api_key_env_var: "OPENAI_API_KEY"
 ```
 
-Important:
-
-- `model` must be `gpt-5.4`
-- empty `system_msg` values are rejected and the default prompt is shown in the validation error
+Omit `system_msg` to use the current built-in prompt. A custom nonempty `system_msg` overrides it. New generated config files omit the default prompt, so future prompt improvements apply automatically. Existing config files created by version 3.x are upgraded in memory from the GPT-5.4 defaults to Luna, one suggestion, and the new prompt. Custom prompts and nondefault suggestion counts are preserved. This migration does not rewrite your config file; edit the stored model or remove the old default prompt when you want the file itself to reflect the new settings.
 
 ### Multiple Config Files
 
@@ -154,7 +152,7 @@ Constraints:
 - no staged changes when using `--amend`
 - the tool analyzes the previous commit diff only
 
-## Git Hooks and JJ
+## Git Hooks
 
 Recommended workflow:
 
@@ -162,6 +160,8 @@ Recommended workflow:
 2. Fix any hook failures.
 3. Re-stage fixes if needed.
 4. Use `turbocommit --amend` after checks pass if you want a better message.
+
+JJ does not use Git staging. Run `turbocommit --auto-commit` in a JJ workspace to describe `@`, or pass `--revision` to describe another change. The command updates the description; it does not create a new JJ change.
 
 ## Dev Container Test Environment
 

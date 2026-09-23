@@ -17,108 +17,36 @@ impl std::fmt::Display for ValidationError {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct Config {
-    #[serde(default)]
     pub model: model::Model,
-    #[serde(default)]
     pub api_endpoint: String,
-    #[serde(default)]
     pub api_key_env_var: String,
-    #[serde(default)]
     pub default_number_of_choices: i32,
-    #[serde(default)]
     pub disable_auto_update_check: bool,
-    #[serde(default)]
     pub reasoning_effort: String,
-    #[serde(default)]
     pub verbosity: String,
-    #[serde(default)]
     pub jj_rewrite_default: bool,
-    #[serde(default)]
+    #[serde(skip_serializing_if = "is_default_system_msg")]
     pub system_msg: String,
+}
+
+fn is_default_system_msg(value: &str) -> bool {
+    value == include_str!("default_prompt.txt")
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            model: model::Model("gpt-5.4".to_string()),
+            model: model::Model("gpt-6-luna".to_string()),
             api_endpoint: String::from("https://api.openai.com/v1/chat/completions"),
             api_key_env_var: String::from("OPENAI_API_KEY"),
-            default_number_of_choices: 3,
+            default_number_of_choices: 1,
             disable_auto_update_check: false,
             reasoning_effort: String::from("low"),
             verbosity: String::from("medium"),
             jj_rewrite_default: false, // Default to overwrite mode
-            system_msg: String::from("<role>
-You generate high-quality conventional commit suggestions from repository diffs.
-Your job is to infer the most useful commit intent and express it clearly, precisely, and compactly.
-</role>
-
-<inputs>
-- You will receive a staged diff or commit diff.
-- You may receive a line beginning with \"Current description:\" containing the user's intended summary.
-- You may receive follow-up revision instructions from the user.
-</inputs>
-
-<output_contract>
-- Respond with JSON only.
-- The JSON must satisfy the provided structured-output schema exactly.
-- Return exactly the requested number of suggestions.
-- Each suggestion must contain:
-  - `title`: a conventional commit header
-  - `body`: either a single concise paragraph string or `null`
-- Do not include markdown fences, explanations, bullets, or extra keys.
-</output_contract>
-
-<task_definition>
-For each suggestion, produce the commit message a strong human reviewer would most likely choose after reading the diff.
-Optimize for semantic accuracy, user intent, and usefulness in project history.
-</task_definition>
-
-<priority_order>
-1. Follow the user's explicit revision instructions.
-2. Preserve the intent from \"Current description:\" when it is consistent with the diff.
-3. Use the diff to infer the most important motivation and effect of the change.
-4. Prefer the highest-signal interpretation over a literal file-by-file summary.
-</priority_order>
-
-<commit_rules>
-- Use this title shape: `<type>(optional-scope): description`
-- Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `build`, `ci`, `chore`
-- Add `!` only for genuine breaking changes.
-- Keep the description imperative, specific, and without a trailing period.
-- Prefer lowercase at the start unless a proper noun, acronym, or identifier requires otherwise.
-- Use a scope only when it adds meaningful precision.
-- Avoid vague descriptions like `update files`, `improve code`, or `misc changes`.
-</commit_rules>
-
-<body_rules>
-- The body is optional and should explain WHY, not restate the diff.
-- When present, write exactly one compact paragraph.
-- Include motivation, user impact, operational impact, or the reason the change matters.
-- Do not use bullets, numbered lists, or footers unless a breaking change truly requires one.
-- If the title already fully captures the value of a small change, set `body` to `null`.
-</body_rules>
-
-<verbosity_policy>
-- `verbosity = low`: prefer `body = null` unless motivation would otherwise be unclear.
-- `verbosity = medium`: include a body when it adds useful context beyond the title.
-- `verbosity = high`: include a body whenever it improves future readability of project history.
-</verbosity_policy>
-
-<reasoning_guidance>
-- Think through the change carefully before writing.
-- Resolve ambiguity using the diff and user-provided intent.
-- If multiple interpretations are plausible, prefer the one that best explains why the change exists.
-- Do not reveal chain-of-thought or analysis. Only return the schema-compliant JSON result.
-</reasoning_guidance>
-
-<quality_bar>
-- Titles should feel deliberate, not generic.
-- Bodies should add signal, not filler.
-- Avoid parroting filenames, function names, or low-level edits unless they are central to intent.
-- The suggestions should be distinct but all defensible.
-</quality_bar>"),
+            system_msg: String::from(include_str!("default_prompt.txt")),
         }
     }
 }
@@ -127,7 +55,7 @@ impl Config {
     pub fn load_from_path(path: &std::path::Path) -> anyhow::Result<Self> {
         //debug log the path we load from
         println!("Loading config from path: {}", path.display());
-        let config = match std::fs::read_to_string(path) {
+        let mut config = match std::fs::read_to_string(path) {
             Ok(config_str) => match serde_yaml::from_str::<Self>(&config_str) {
                 Ok(config) => config,
                 Err(err) => {
@@ -144,6 +72,8 @@ impl Config {
                 }
             },
         };
+
+        config.upgrade_legacy_defaults();
 
         // Validate the configuration
         if let Err(validation_errors) = config.validate() {
@@ -183,7 +113,7 @@ impl Config {
             |path| path.join(".turbocommit.yaml"),
         );
 
-        let config = match std::fs::read_to_string(&path) {
+        let mut config = match std::fs::read_to_string(&path) {
             Ok(config_str) => match serde_yaml::from_str::<Self>(&config_str) {
                 Ok(config) => config,
                 Err(err) => {
@@ -212,6 +142,8 @@ impl Config {
                 }
             },
         };
+
+        config.upgrade_legacy_defaults();
 
         // Validate the configuration
         if let Err(validation_errors) = config.validate() {
@@ -278,6 +210,23 @@ impl Config {
         )
     }
 
+    fn upgrade_legacy_defaults(&mut self) {
+        // Config files generated by 3.x contain the old model and full default prompt.
+        // Keep user-written prompts and nondefault suggestion counts intact.
+        let legacy_prompt = include_str!("legacy_gpt54_prompt.txt");
+        let has_legacy_prompt =
+            self.system_msg.replace("\r\n", "\n") == legacy_prompt.replace("\r\n", "\n");
+        if self.model.0 == "gpt-5.4" {
+            self.model = model::Model("gpt-6-luna".to_string());
+            if has_legacy_prompt && self.default_number_of_choices == 3 {
+                self.default_number_of_choices = 1;
+            }
+        }
+        if has_legacy_prompt {
+            self.system_msg = Self::default().system_msg;
+        }
+    }
+
     fn validate(&self) -> Result<(), Vec<ValidationError>> {
         let mut errors = Vec::new();
         let default = Self::default();
@@ -322,6 +271,27 @@ impl Config {
             });
         }
 
+        if !["none", "low", "medium", "high", "xhigh", "max"]
+            .contains(&self.reasoning_effort.as_str())
+        {
+            errors.push(ValidationError {
+                field: "reasoning_effort".to_string(),
+                message: "Use none, low, medium, high, xhigh, or max".to_string(),
+            });
+        } else if self.model.0 == "gpt-6-astra" && self.reasoning_effort == "none" {
+            errors.push(ValidationError {
+                field: "reasoning_effort".to_string(),
+                message: "gpt-6-astra requires low or higher reasoning effort".to_string(),
+            });
+        }
+
+        if !["low", "medium", "high"].contains(&self.verbosity.as_str()) {
+            errors.push(ValidationError {
+                field: "verbosity".to_string(),
+                message: "Use low, medium, or high".to_string(),
+            });
+        }
+
         if errors.is_empty() {
             Ok(())
         } else {
@@ -343,10 +313,69 @@ mod tests {
         (file_path, dir)
     }
 
+    fn set_test_home(path: &std::path::Path) {
+        std::env::set_var("HOME", path);
+        std::env::set_var("USERPROFILE", path);
+    }
+
     #[test]
     fn test_default_config_is_valid() {
         let config = Config::default();
         assert!(config.validate().is_ok());
+        assert_eq!(config.model.0, "gpt-6-luna");
+        assert_eq!(config.default_number_of_choices, 1);
+    }
+
+    #[test]
+    fn test_partial_config_uses_new_defaults() {
+        let (path, _dir) = create_test_config("disable_auto_update_check: true\n");
+        let config = Config::load_from_path(&path).unwrap();
+        assert_eq!(config.model.0, "gpt-6-luna");
+        assert_eq!(config.default_number_of_choices, 1);
+        assert!(config.disable_auto_update_check);
+        assert_eq!(config.system_msg, Config::default().system_msg);
+    }
+
+    #[test]
+    fn test_generated_config_omits_default_prompt() {
+        let yaml = serde_yaml::to_string(&Config::default()).unwrap();
+        assert!(!yaml.contains("system_msg:"));
+        let parsed: Config = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(parsed.system_msg, Config::default().system_msg);
+    }
+
+    #[test]
+    fn test_generated_legacy_config_upgrades_in_memory() {
+        let mut legacy = Config::default();
+        legacy.model = model::Model("gpt-5.4".to_string());
+        legacy.default_number_of_choices = 3;
+        legacy.system_msg = include_str!("legacy_gpt54_prompt.txt").to_string();
+        let (path, _dir) = create_test_config(&serde_yaml::to_string(&legacy).unwrap());
+        let config = Config::load_from_path(&path).unwrap();
+        assert_eq!(config.model.0, "gpt-6-luna");
+        assert_eq!(config.default_number_of_choices, 1);
+        assert_eq!(config.system_msg, Config::default().system_msg);
+    }
+
+    #[test]
+    fn test_legacy_model_keeps_custom_prompt_and_choice_count() {
+        let mut legacy = Config::default();
+        legacy.model = model::Model("gpt-5.4".to_string());
+        legacy.default_number_of_choices = 3;
+        legacy.system_msg = "My custom prompt".to_string();
+        let (path, _dir) = create_test_config(&serde_yaml::to_string(&legacy).unwrap());
+        let config = Config::load_from_path(&path).unwrap();
+        assert_eq!(config.model.0, "gpt-6-luna");
+        assert_eq!(config.default_number_of_choices, 3);
+        assert_eq!(config.system_msg, "My custom prompt");
+    }
+
+    #[test]
+    fn test_astra_rejects_none_reasoning() {
+        let mut config = Config::default();
+        config.model = model::Model("gpt-6-astra".to_string());
+        config.reasoning_effort = "none".to_string();
+        assert!(config.validate().is_err());
     }
 
     #[test]
@@ -397,7 +426,7 @@ mod tests {
     #[test]
     fn test_load_valid_config() {
         let config_content = r#"
-model: gpt-5.4
+model: gpt-6-luna
 api_endpoint: https://api.openai.com/v1/chat/completions
 default_number_of_choices: 3
 disable_auto_update_check: true
@@ -406,7 +435,7 @@ system_msg: "Test message"
         let (_file_path, _dir) = create_test_config(config_content);
 
         // Set the home directory to our temp directory for this test
-        std::env::set_var("HOME", _dir.path());
+        set_test_home(_dir.path());
 
         let config = Config::load();
         assert!(config.is_ok());
@@ -420,7 +449,7 @@ system_msg: "Test message"
         let (_file_path, _dir) = create_test_config(config_content);
 
         // Set the home directory to our temp directory for this test
-        std::env::set_var("HOME", _dir.path());
+        set_test_home(_dir.path());
 
         let config = Config::load();
         assert!(
@@ -432,7 +461,7 @@ system_msg: "Test message"
     #[test]
     fn test_load_missing_file_creates_default() {
         let _dir = tempdir().unwrap();
-        std::env::set_var("HOME", _dir.path());
+        set_test_home(_dir.path());
 
         // First load should create the file
         let config = Config::load();
@@ -465,14 +494,14 @@ system_msg: "Test message"
     #[test]
     fn test_empty_system_msg_shows_default() {
         let config_content = r#"
-model: gpt-5.4
+model: gpt-6-luna
 api_endpoint: https://api.openai.com/v1/chat/completions
 default_number_of_choices: 3
 disable_auto_update_check: false
 system_msg: ""
 "#;
         let (_file_path, _dir) = create_test_config(config_content);
-        std::env::set_var("HOME", _dir.path());
+        set_test_home(_dir.path());
 
         let error = Config::load().unwrap_err();
         let error_msg = error.to_string();
@@ -486,11 +515,11 @@ system_msg: ""
     fn test_save_if_changed() {
         let _dir = tempdir().unwrap();
         // Set the home directory to our temp directory for this test
-        std::env::set_var("HOME", _dir.path());
+        set_test_home(_dir.path());
 
         // Create a config with some changes
         let mut config = Config::default();
-        config.model = model::Model("gpt-5.4".to_string());
+        config.model = model::Model("gpt-6-luna".to_string());
 
         // First save should succeed
         assert!(config.save_if_changed().is_ok());
@@ -503,7 +532,7 @@ system_msg: ""
         assert!(config_path.exists());
         let content = std::fs::read_to_string(config_path).unwrap();
         let loaded_config: Config = serde_yaml::from_str(&content).unwrap();
-        assert_eq!(loaded_config.model.0, "gpt-5.4");
+        assert_eq!(loaded_config.model.0, "gpt-6-luna");
     }
 
     #[test]
@@ -518,7 +547,7 @@ system_msg: ""
     #[test]
     fn test_load_from_path_valid_config() {
         let config_content = r#"
-model: gpt-5.4
+model: gpt-6-luna
 api_endpoint: https://api.openai.com/v1/chat/completions
 default_number_of_choices: 3
 disable_auto_update_check: true
@@ -529,7 +558,7 @@ system_msg: "Test message"
         let config = Config::load_from_path(&file_path);
         assert!(config.is_ok());
         let config = config.unwrap();
-        assert_eq!(config.model.0, "gpt-5.4");
+        assert_eq!(config.model.0, "gpt-6-luna");
         assert!(config.disable_auto_update_check);
         assert_eq!(config.system_msg, "Test message");
     }
@@ -577,7 +606,7 @@ system_msg: "Test message"
     #[test]
     fn test_load_from_path_invalid_model() {
         let config_content = r#"
-model: "gpt-5.4-pro"
+model: "gpt-6-luna-pro"
 api_endpoint: "https://api.openai.com/v1/chat/completions"
 default_number_of_choices: 3
 disable_auto_update_check: false
@@ -588,13 +617,13 @@ system_msg: "Test message"
         let config = Config::load_from_path(&file_path);
         assert!(config.is_err());
         let err = config.unwrap_err().to_string();
-        assert!(err.contains("Only gpt-5.4 is supported"));
+        assert!(err.contains("Supported models: gpt-6-luna"));
     }
 
     #[test]
     fn test_load_from_path_empty_system_msg() {
         let config_content = r#"
-model: "gpt-5.4"
+model: "gpt-6-luna"
 api_endpoint: "https://api.openai.com/v1/chat/completions"
 default_number_of_choices: 3
 disable_auto_update_check: false

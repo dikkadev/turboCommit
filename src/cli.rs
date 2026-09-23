@@ -10,7 +10,7 @@ pub struct Options {
     pub n: i32,
     pub msg: String,
     pub model: model::Model,
-    pub auto_commmit: bool,
+    pub auto_commit: bool,
     pub check_version_only: bool,
     pub api_endpoint: String,
     pub system_msg: Option<String>,
@@ -35,7 +35,7 @@ impl From<&Config> for Options {
             n: config.default_number_of_choices,
             msg: String::new(),
             model: config.model.clone(),
-            auto_commmit: false,
+            auto_commit: false,
             check_version_only: false,
             api_endpoint: config.api_endpoint.clone(),
             system_msg: None,
@@ -97,8 +97,7 @@ impl Options {
                     }
                 }
                 "-a" | "--auto-commit" => {
-                    opts.auto_commmit = true;
-                    opts.n = 1;
+                    opts.auto_commit = true;
                 }
                 "--amend" => {
                     opts.amend = true;
@@ -136,13 +135,11 @@ impl Options {
                 }
                 "-e" | "--reasoning-effort" => {
                     if let Some(effort) = iter.next() {
-                        // Support 'none' to disable reasoning, plus low/medium/high
-                        if !["none", "low", "medium", "high"].contains(&effort.as_str()) {
-                            println!(
-                                "{} {}",
-                                "Warning: Uncommon reasoning effort value.".yellow(),
-                                "Common values are: none, low, medium, high".bright_black()
-                            );
+                        if !["none", "low", "medium", "high", "xhigh", "max"]
+                            .contains(&effort.as_str())
+                        {
+                            eprintln!("Invalid reasoning effort: {effort}. Use none, low, medium, high, xhigh, or max.");
+                            process::exit(1);
                         }
                         opts.reasoning_effort = Some(effort);
                     }
@@ -150,11 +147,8 @@ impl Options {
                 "-v" | "--verbosity" => {
                     if let Some(level) = iter.next() {
                         if !["low", "medium", "high"].contains(&level.as_str()) {
-                            println!(
-                                "{} {}",
-                                "Warning: Invalid verbosity level.".yellow(),
-                                "Valid values are: low, medium, high".bright_black()
-                            );
+                            eprintln!("Invalid verbosity: {level}. Use low, medium, or high.");
+                            process::exit(1);
                         }
                         opts.verbosity = Some(level);
                     }
@@ -210,6 +204,13 @@ impl Options {
         if !msg.is_empty() {
             opts.msg = format!("User Explanation/Instruction: '{}'", msg.trim());
         }
+        if opts.model.0 == "gpt-6-astra" && opts.reasoning_effort.as_deref() == Some("none") {
+            eprintln!("gpt-6-astra requires low or higher reasoning effort.");
+            process::exit(1);
+        }
+        if opts.auto_commit {
+            opts.n = 1;
+        }
         opts
     }
 }
@@ -230,30 +231,26 @@ fn help() {
     println!("{}", " \\___/\\____/_/ /_/ /_/_/ /_/ /_/_/\\__/".green());
 
     println!("\nUsage: turbocommit [options] [message]\n");
-    println!(
-        "{}",
-        "NOTE: turboCommit now exclusively uses gpt-5.4"
-            .yellow()
-            .bold()
-    );
+    println!("{}", "Default model: gpt-6-luna".yellow().bold());
     println!(
         "{}\n",
-        "No legacy or alternate model variants are supported".bright_black()
+        "GPT-6 Sol and Astra are also available".bright_black()
     );
     println!("Options:");
-    println!("  -n <n>   Number of choices to generate (default: 3)\n");
-    println!("  -m <m>   Model to use (must be gpt-5.4)\n  --model <m>");
-    println!("           Example: gpt-5.4\n");
+    println!("  -n <n>   Number of choices to generate (default: 1)\n");
+    println!("  -m <m>   Model to use (gpt-6-luna, gpt-6-sol, gpt-6-astra)\n  --model <m>\n");
     println!("  -a, --auto-commit  Automatically generate and commit a single message\n");
-    println!("  --amend  Amend the last commit with the generated message\n");
+    println!("  --amend  Amend the last Git commit message\n");
     println!("  --check-version  Check for updates and exit\n");
     println!("  --api-endpoint <url>  Set the API endpoint URL\n");
     println!("  --system-msg-file <path>  Load system message from a file\n");
     println!("  --disable-auto-update-check  Disable automatic update checks\n");
     println!("  --api-key <key>  Set the API key\n");
     println!("  -e, --reasoning-effort <effort>  Set the reasoning effort level\n");
-    println!("                              Values: none, low (default), medium, high\n");
-    println!("                              Use 'none' to disable reasoning features\n");
+    println!(
+        "                              Values: none, low (default), medium, high, xhigh, max\n"
+    );
+    println!("                              Astra requires low or higher\n");
     println!("  -v, --verbosity <level>  Set output verbosity level (default: medium)\n");
     println!("                      Values: low, medium, high\n");
     println!("  -d, --debug  Enable debug mode (shows request/response info and token usage)\n");
@@ -267,7 +264,7 @@ fn help() {
     println!("Anything else will be concatenated into an extra message given to the AI\n");
     println!("You can change the defaults for these options and the system message prompt in the config file, that is created the first time running the program\n{}",
         home::home_dir().unwrap_or_else(|| "".into()).join(".turbocommit.yaml").display());
-    println!("To go back to the default system message, delete the config file.\n");
+    println!("To use the current default system message, remove the system_msg field from the config file.\n");
     println!(
         "\nThe system message is about ~{} tokens long",
         format!(
@@ -311,7 +308,7 @@ mod tests {
             "-n",
             "3",
             "--model",
-            "gpt-5.4",
+            "gpt-6-luna",
             "--reasoning-effort",
             "medium",
             "--verbosity",
@@ -323,31 +320,44 @@ mod tests {
         let options = Options::new(args.into_iter(), &config);
 
         assert_eq!(options.n, 3);
-        assert_eq!(options.model.0, "gpt-5.4");
+        assert_eq!(options.model.0, "gpt-6-luna");
         assert_eq!(options.reasoning_effort, Some("medium".to_string()));
         assert_eq!(options.verbosity, Some("high".to_string()));
         assert_eq!(options.msg, "User Explanation/Instruction: 'test commit'");
     }
 
     #[test]
-    fn test_uncommon_reasoning_effort() {
+    fn test_extra_high_reasoning_effort() {
         let config = Config::default();
-        let args = vec!["turbocommit", "--reasoning-effort", "very-high"];
+        let args = vec!["turbocommit", "--reasoning-effort", "xhigh"];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
-        assert_eq!(options.reasoning_effort, Some("very-high".to_string()));
+        assert_eq!(options.reasoning_effort, Some("xhigh".to_string()));
+    }
+
+    #[test]
+    fn test_auto_commit_requests_one_suggestion_regardless_of_option_order() {
+        let config = Config::default();
+        for args in [
+            vec!["turbocommit", "--auto-commit", "-n", "3"],
+            vec!["turbocommit", "-n", "3", "--auto-commit"],
+        ] {
+            let options = Options::new(args.into_iter().map(String::from), &config);
+            assert!(options.auto_commit);
+            assert_eq!(options.n, 1);
+        }
     }
 
     #[test]
     fn test_debug_mode() {
         let config = Config::default();
-        let args = vec!["turbocommit", "-d", "--model", "gpt-5.4"];
+        let args = vec!["turbocommit", "-d", "--model", "gpt-6-luna"];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
         assert!(options.debug);
-        assert_eq!(options.model.0, "gpt-5.4");
+        assert_eq!(options.model.0, "gpt-6-luna");
     }
 
     #[test]
@@ -387,13 +397,13 @@ mod tests {
             "--reasoning-effort",
             "none",
             "--model",
-            "gpt-5.4",
+            "gpt-6-luna",
         ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
         assert_eq!(options.reasoning_effort, Some("none".to_string()));
-        assert_eq!(options.model.0, "gpt-5.4");
+        assert_eq!(options.model.0, "gpt-6-luna");
     }
 
     #[test]
@@ -401,13 +411,19 @@ mod tests {
         let config = Config::default();
 
         // Test low verbosity
-        let args = vec!["turbocommit", "--verbosity", "low", "--model", "gpt-5.4"];
+        let args = vec!["turbocommit", "--verbosity", "low", "--model", "gpt-6-luna"];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
         assert_eq!(options.verbosity, Some("low".to_string()));
 
         // Test high verbosity
-        let args = vec!["turbocommit", "--verbosity", "high", "--model", "gpt-5.4"];
+        let args = vec![
+            "turbocommit",
+            "--verbosity",
+            "high",
+            "--model",
+            "gpt-6-luna",
+        ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
         assert_eq!(options.verbosity, Some("high".to_string()));
@@ -423,14 +439,14 @@ mod tests {
             "-v",
             "low",
             "--model",
-            "gpt-5.4",
+            "gpt-6-luna",
         ];
         let args = args.into_iter().map(String::from).collect::<Vec<String>>();
         let options = Options::new(args.into_iter(), &config);
 
         assert_eq!(options.reasoning_effort, Some("high".to_string()));
         assert_eq!(options.verbosity, Some("low".to_string()));
-        assert_eq!(options.model.0, "gpt-5.4");
+        assert_eq!(options.model.0, "gpt-6-luna");
     }
 
     #[test]
