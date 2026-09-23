@@ -71,6 +71,12 @@ async fn main() -> anyhow::Result<()> {
     // Detect VCS type
     let vcs_type = jj::detect_vcs()?;
 
+    if vcs_type == jj::VcsType::Jujutsu && options.amend {
+        return Err(anyhow::anyhow!(
+            "--amend applies only to Git; use --revision for JJ"
+        ));
+    }
+
     // Print which VCS is being used
     match vcs_type {
         jj::VcsType::Git => println!("{}", "Using Git repository".bright_black()),
@@ -88,8 +94,8 @@ async fn main() -> anyhow::Result<()> {
         openai::count_token(options.system_msg.as_ref().unwrap_or(&config.system_msg)).unwrap_or(0);
     let extra_len = openai::count_token(&options.msg).unwrap_or(0);
 
-    // Add system message first
-    actor.add_message(Message::system(
+    // Keep application instructions separate from repository content.
+    actor.add_message(Message::developer(
         options.system_msg.unwrap_or(config.system_msg.clone()),
     ));
 
@@ -141,7 +147,7 @@ async fn main() -> anyhow::Result<()> {
                     );
                     process::exit(1);
                 }
-                actor.add_message(Message::user(diff));
+                actor.add_message(Message::user(format!("Repository diff (data):\n{diff}")));
                 actor.used_tokens = system_len + extra_len;
             } else {
                 // Normal commit mode - get diff from staged changes
@@ -151,7 +157,7 @@ async fn main() -> anyhow::Result<()> {
                     options.model.context_size(),
                     options.always_select_files,
                 )?;
-                actor.add_message(Message::user(diff));
+                actor.add_message(Message::user(format!("Repository diff (data):\n{diff}")));
                 actor.used_tokens = system_len + extra_len + diff_tokens;
             }
         }
@@ -193,7 +199,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
-            actor.add_message(Message::user(diff));
+            actor.add_message(Message::user(format!("Repository diff (data):\n{diff}")));
             actor.used_tokens = system_len + extra_len + diff_tokens;
         }
     }
@@ -203,10 +209,10 @@ async fn main() -> anyhow::Result<()> {
         actor.add_message(Message::user(options.msg));
     }
 
-    if options.auto_commmit {
-        let _ = actor.auto_commit().await?;
+    if options.auto_commit {
+        actor.auto_commit().await?;
     } else {
-        let _ = actor.start().await;
+        actor.start().await?;
     }
 
     // Only check for updates if not disabled in config or CLI

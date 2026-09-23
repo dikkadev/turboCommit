@@ -8,10 +8,14 @@ impl FromStr for Model {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        const ALLOWED_MODELS: &[&str] = &["gpt-5.4"];
+        const ALLOWED_MODELS: &[&str] = &["gpt-6-luna", "gpt-6-sol", "gpt-6-astra"];
 
         if !ALLOWED_MODELS.contains(&s) {
-            return Err(format!("Invalid model '{}'. Only gpt-5.4 is supported", s));
+            return Err(format!(
+                "Invalid model '{}'. Supported models: {}",
+                s,
+                ALLOWED_MODELS.join(", ")
+            ));
         }
         Ok(Self(s.to_string()))
     }
@@ -44,10 +48,7 @@ impl<'de> Deserialize<'de> for Model {
 
 impl Model {
     pub fn context_size(&self) -> usize {
-        match self.0.as_str() {
-            "gpt-5.4" => 1_050_000,
-            _ => 1_050_000,
-        }
+        1_050_000
     }
 }
 
@@ -56,14 +57,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_gpt54_context_size() {
-        assert_eq!(Model("gpt-5.4".to_string()).context_size(), 1_050_000);
+    fn test_gpt6_context_size() {
+        assert_eq!(Model("gpt-6-luna".to_string()).context_size(), 1_050_000);
     }
 
     #[test]
-    fn test_only_gpt54_allowed() {
-        assert!(Model::from_str("gpt-5.4").is_ok());
+    fn test_only_gpt6_family_allowed() {
+        for model in ["gpt-6-luna", "gpt-6-sol", "gpt-6-astra"] {
+            assert!(Model::from_str(model).is_ok());
+        }
 
+        assert!(Model::from_str("gpt-5.4").is_err());
         assert!(Model::from_str("gpt-5").is_err());
         assert!(Model::from_str("gpt-5.4-pro").is_err());
         assert!(Model::from_str("gpt-5-mini").is_err());
@@ -79,10 +83,10 @@ mod tests {
     fn test_model_validation_error_message() {
         let err = Model::from_str("gpt-4").unwrap_err();
         assert!(err.contains("gpt-4"));
-        assert!(err.contains("gpt-5.4"));
+        assert!(err.contains("gpt-6-luna"));
 
         let err = Model::from_str("gpt-5").unwrap_err();
         assert!(err.contains("gpt-5"));
-        assert!(err.contains("gpt-5.4"));
+        assert!(err.contains("gpt-6-luna"));
     }
 }
